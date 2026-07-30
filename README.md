@@ -12,7 +12,7 @@ Every point traces to a published source. Every refusal has a reason. Every numb
 [![License: ODbL data](https://img.shields.io/badge/data-ODbL%201.0-lightgrey.svg)](https://opendatacommons.org/licenses/odbl/1-0/)
 [![No scraping](https://img.shields.io/badge/scraping-none-success.svg)](#where-the-data-comes-from)
 
-### [**Launch the live app**](https://india-packaged-food-analysis.streamlit.app/)
+[![Live](https://img.shields.io/badge/●-Live-brightgreen?style=for-the-badge)](https://india-packaged-food-analysis.streamlit.app/) [**Launch the live app**](https://india-packaged-food-analysis.streamlit.app/)
 
 **[Full project plan](../docs/india-food-health-index-plan.md) · [Report a bug](https://github.com/SahilYadav-op/india-food-health-index/issues)**
 

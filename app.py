@@ -386,6 +386,11 @@ st.sidebar.caption(
     "claims about any disease, and no single food is good or bad on its own — "
     "the evidence behind every model here is about overall diet."
 )
+st.sidebar.markdown(
+    "Built by **[Sahil Yadav](https://github.com/SahilYadav-op)**  \n"
+    "[GitHub](https://github.com/SahilYadav-op/india-food-health-index) · "
+    "[LinkedIn](https://www.linkedin.com/in/sahilgod01/)"
+)
 
 if df.empty:
     st.title("No data yet")
