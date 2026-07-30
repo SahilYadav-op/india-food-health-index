@@ -12,9 +12,21 @@ Every point traces to a published source. Every refusal has a reason. Every numb
 [![License: ODbL data](https://img.shields.io/badge/data-ODbL%201.0-lightgrey.svg)](https://opendatacommons.org/licenses/odbl/1-0/)
 [![No scraping](https://img.shields.io/badge/scraping-none-success.svg)](#where-the-data-comes-from)
 
-**[Live demo](#) · [Full project plan](../docs/india-food-health-index-plan.md) · [Report a bug](https://github.com/SahilYadav-op/india-food-health-index/issues)**
+### [**Launch the live app**](https://india-packaged-food-analysis.streamlit.app/)
+
+**[Full project plan](../docs/india-food-health-index-plan.md) · [Report a bug](https://github.com/SahilYadav-op/india-food-health-index/issues)**
 
 </div>
+
+---
+
+## Problem statement
+
+Walk down any Indian supermarket aisle and the front of the pack is doing everything it can to *not* tell you the truth. **"No added preservatives."** **"Baked, not fried."** **"Made with real fruit."** **"100% natural."** None of that is regulated the way the actual nutrition panel is — front-of-pack claims are marketing copy, and Indian FSSAI rules don't require a warning label the way Chile, Mexico or Israel do. The only place the real story lives is the small, back-of-pack ingredient list and nutrition table, printed in size-6 font, in a format most people never learn to read.
+
+The result: a biscuit branded as a "digestive" health food can carry more saturated fat and sugar per 100 g than a regular cream biscuit, and nothing on the front of the pack tells you that. A "no added MSG" claim can be true and completely irrelevant, because the product's real problem is sodium. A snack can be positioned as a protein food while being ultra-processed with five cosmetic additives.
+
+**This project exists to close that gap** — to take the one part of the label that can't legally lie (the mandatory nutrition panel and ingredient list) and turn it into a single number you can actually compare across products, backed by the same nutrient-science models used internationally, so a shopper doesn't have to take a brand's marketing at its word.
 
 ---
 
@@ -38,6 +50,7 @@ Kurkure → 3/10  "Poor"
 
 ## Table of contents
 
+- [Problem statement](#problem-statement)
 - [How it scores a product](#how-it-scores-a-product)
 - [The four pillars](#the-four-pillars)
 - [Quick start](#quick-start)
@@ -50,6 +63,7 @@ Kurkure → 3/10  "Poor"
 - [Repo layout](#repo-layout)
 - [Roadmap](#roadmap)
 - [License & attribution](#license--attribution)
+- [Author](#author)
 
 ---
 
@@ -258,6 +272,13 @@ Full detail: [`docs/india-food-health-index-plan.md`](../docs/india-food-health-
 ## License & attribution
 
 Product data from **Open Food Facts**, licensed under the **Open Database License (ODbL) 1.0** — any redistribution of this dataset or a derivative must credit Open Food Facts and remain under ODbL. Images CC-BY-SA 3.0.
+
+## Author
+
+**Sahil Yadav**
+
+[![GitHub](https://img.shields.io/badge/GitHub-SahilYadav--op-181717?logo=github)](https://github.com/SahilYadav-op)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-sahilgod01-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/sahilgod01/)
 
 ---
 
