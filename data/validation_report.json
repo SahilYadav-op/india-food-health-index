@@ -1,0 +1,42 @@
+{
+  "source": "C:\\Users\\sahil\\Desktop\\claude\\india-food-health-index\\data\\raw\\off_india_raw.jsonl",
+  "raw_records": 3413,
+  "duplicate_barcodes": 12,
+  "passed": 3386,
+  "quarantined": 15,
+  "issue_counts": {
+    "energy_drift": 68,
+    "energy_mismatch": 66,
+    "mass_budget": 27,
+    "salt_sodium": 17
+  },
+  "tier_counts": {
+    "0": 1127,
+    "1": 711,
+    "2": 1200,
+    "3": 348
+  },
+  "quarantine_reasons": {
+    "mass_budget": 15
+  },
+  "nutrient_coverage": {
+    "energy_kcal": 0.9926,
+    "fat": 0.9643,
+    "saturated_fat": 0.8438,
+    "trans_fat": 0.2147,
+    "cholesterol": 0.215,
+    "carbohydrates": 0.9749,
+    "sugars": 0.8653,
+    "added_sugars": 0.2936,
+    "fiber": 0.4891,
+    "proteins": 0.9687,
+    "salt": 0.7528,
+    "sodium": 0.7528,
+    "calcium": 0.1335,
+    "iron": 0.0729,
+    "fvnl_estimate": 0.1113,
+    "fvl_estimate": 0.1119
+  },
+  "ingredient_coverage": 0.6063,
+  "mean_additives": 1.72
+}

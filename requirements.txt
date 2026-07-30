@@ -1,0 +1,7 @@
+# Pinned for Streamlit Community Cloud. Keep this list minimal: the free tier
+# runs on 0.078-2 cores and 690 MB-2.7 GB RAM, and every extra wheel is startup
+# time the app pays on every cold boot.
+streamlit==1.40.1
+pandas==2.2.3
+pyarrow==18.1.0
+requests==2.32.3
