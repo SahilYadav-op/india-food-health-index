@@ -17,9 +17,13 @@ The nutrition table and the ingredient list are on every pack, in small type on 
 - Search a product by name, brand or barcode and see its score and how it got there.
 - See higher-scoring products in the same category. A suggestion has to score at least 2 points higher and can't have more sugar, saturated fat or sodium than the product you looked up.
 - Compare up to three products side by side.
+- Type in the numbers from a pack yourself ("Check a label") to score a product that isn't in the dataset or has missing data. A box left empty counts as unknown, never as zero.
+- See how much of the daily limits for sodium, added sugar, saturated fat, trans fat and total fat a portion uses up. The limits come from WHO guidance and match the reference values FSSAI prints on labels.
 - Browse everything, or see the highest and lowest scores in each category.
 
 Every product page links to its source record on Open Food Facts and shows when that record was last edited, so you can check the numbers or fix them.
+
+The daily limits are shown next to the score but aren't part of it. They only make sense for a portion, and only about half the products have a serving size on record. The score already uses WHO's per-100 g limits for each category, so adding the daily limits would count the same sodium and sugar twice.
 
 ## How the score works
 
@@ -96,7 +100,7 @@ python pipeline/build_dataset.py --report
 
 At the API's rate limit that takes hours for a few thousand products. For a bigger pull, use the bulk export instead with `--source dump`.
 
-Tests (63 of them, no pytest needed):
+Tests (74 of them, no pytest needed):
 
 ```bash
 python tests/test_scoring.py
@@ -118,6 +122,8 @@ scoring/
   additives.py          the additive table
   index.py              combines the four parts into the 1 to 10 score
   suggest.py            higher-scoring products in the same category
+  limits.py             daily limits from WHO and FSSAI, and how much a portion uses
+  custom.py             turns numbers typed from a pack into a row to score
 tests/test_scoring.py
 ```
 

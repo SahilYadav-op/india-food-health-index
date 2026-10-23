@@ -661,6 +661,138 @@ def test_alternatives_empty_for_unscored_or_catch_all():
     assert better_alternatives(table, "nope").empty
 
 
+# --------------------------------------------------------------------------- #
+# daily limits and typed-in labels
+# --------------------------------------------------------------------------- #
+
+
+def test_daily_share_arithmetic():
+    from scoring.limits import daily_shares
+
+    row = {"sodium": 0.8, "added_sugars": 10.0, "saturated_fat": 5.5,
+           "trans_fat": 0.1, "fat": 20.0}
+    shares = {s.label: s for s in daily_shares(row, 50)}
+    # 50 g of a product with 800 mg sodium per 100 g gives 400 mg, a fifth of 2000 mg.
+    assert round(shares["Sodium"].percent, 1) == 20.0
+    assert round(shares["Sodium"].portions_to_limit, 1) == 5.0
+    assert round(shares["Added sugar"].in_portion, 1) == 5.0
+    assert round(shares["Saturated fat"].percent, 1) == 12.5   # 2.75 g of 22 g
+
+
+def test_daily_share_uses_total_sugars_only_when_added_is_missing_and_says_so():
+    from scoring.limits import daily_shares
+
+    with_added = {s.label: s for s in daily_shares({"added_sugars": 4.0, "sugars": 20.0}, 100)}
+    assert "Added sugar" in with_added and "Total sugars" not in with_added
+    without = {s.label: s for s in daily_shares({"sugars": 20.0}, 100)}
+    assert "Total sugars" in without and without["Total sugars"].note
+
+
+def test_daily_share_skips_missing_values_instead_of_counting_zero():
+    from scoring.limits import daily_shares
+
+    labels = [s.label for s in daily_shares({"sodium": 0.5, "fat": float("nan")}, 100)]
+    assert labels == ["Sodium"], labels
+    assert daily_shares({"sodium": 0.5}, 0) == []
+
+
+def test_serving_size_text_is_read():
+    from scoring.limits import serving_grams
+
+    assert serving_grams("45g") == 45
+    assert serving_grams("30 g") == 30
+    assert serving_grams("1 biscuit (10g)") == 10
+    assert serving_grams("250 ml") == 250
+    assert serving_grams("one cup") is None
+    assert serving_grams(None) is None
+
+
+def test_blank_input_is_unknown_not_zero():
+    from scoring.custom import parse_number
+
+    assert parse_number("") is None
+    assert parse_number("   ") is None
+    assert parse_number("0") == 0.0
+    assert parse_number("12,5") == 12.5
+    assert parse_number("<0.5") == 0.5
+    for bad in ("abc", "-3", "1.2.3"):
+        try:
+            parse_number(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad!r} should have been rejected")
+
+
+def test_per_serving_numbers_are_scaled_to_100g():
+    from scoring.custom import row_from_inputs
+
+    row = row_from_inputs(
+        name="x", category_key="biscuits", per_serving=True, serving_g=25.0,
+        values={"energy_kcal": 120.0, "fat": 5.0}, sodium_mg=50.0, salt_g=None,
+        ingredients=None)
+    assert row["energy_kcal"] == 480.0 and row["fat"] == 20.0
+    assert round(row["sodium"], 3) == 0.2          # 50 mg in 25 g = 200 mg per 100 g
+    assert round(row["salt"], 3) == 0.5
+
+
+def test_salt_is_converted_to_sodium_and_sodium_wins_when_both_given():
+    from scoring.custom import row_from_inputs
+
+    base = dict(name=None, category_key="biscuits", per_serving=False,
+                serving_g=None, values={}, ingredients=None)
+    only_salt = row_from_inputs(**base, sodium_mg=None, salt_g=1.0)
+    assert round(only_salt["sodium"], 3) == 0.4
+    both = row_from_inputs(**base, sodium_mg=100.0, salt_g=5.0)
+    assert round(both["sodium"], 3) == 0.1
+
+
+def test_per_serving_without_a_serving_size_is_an_error():
+    from scoring.custom import row_from_inputs
+
+    try:
+        row_from_inputs(name=None, category_key="biscuits", per_serving=True,
+                        serving_g=None, values={}, sodium_mg=None, salt_g=None,
+                        ingredients=None)
+    except ValueError:
+        return
+    raise AssertionError("expected a ValueError")
+
+
+def test_typed_label_scores_and_missing_fields_are_refused_not_guessed():
+    from scoring.custom import row_from_inputs
+
+    full = row_from_inputs(
+        name="Test biscuit", category_key="biscuits", per_serving=False,
+        serving_g=None, ingredients="Wheat flour, sugar, palm oil, salt",
+        values={"energy_kcal": 480.0, "proteins": 7.0, "carbohydrates": 70.0,
+                "sugars": 25.0, "fat": 18.0, "saturated_fat": 9.0},
+        sodium_mg=400.0, salt_g=None)
+    assert score_product(full).scoreable
+    # Leave out sodium: blank is unknown, so there is nothing to score.
+    no_sodium = dict(full, sodium=None, salt=None)
+    refused = score_product(no_sodium)
+    assert not refused.scoreable and "sodium" in refused.refusal_reason
+
+
+def test_chosen_category_is_taken_as_given():
+    row = {"category_override": "milk", "product_name": "Chocolate bar",
+           "categories_tags": ["en:chocolates"]}
+    assert classify(row).key == "milk"
+    assert classify(dict(row, category_override="not a category")).key != "milk"
+
+
+def test_input_warnings_catch_typing_mistakes():
+    from scoring.custom import input_warnings
+
+    sat_over_fat = input_warnings({"fat": 5.0, "saturated_fat": 9.0})
+    assert any("Saturated fat" in w for w in sat_over_fat)
+    kj = input_warnings({"energy_kcal": 2000.0, "fat": 20.0, "carbohydrates": 60.0,
+                         "proteins": 8.0})
+    assert any("kilojoules" in w for w in kj), kj
+    assert input_warnings({"energy_kcal": 480.0, "fat": 18.0, "saturated_fat": 9.0,
+                           "carbohydrates": 70.0, "sugars": 25.0, "proteins": 7.0}) == []
+
+
 if __name__ == "__main__":
     import traceback
 

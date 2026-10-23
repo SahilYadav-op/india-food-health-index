@@ -648,7 +648,14 @@ def classify(row: dict) -> CategoryResult:
 
     `row` needs: categories_tags, product_name, brands, and optionally the
     per-100 g nutrient columns. Missing keys are tolerated.
+
+    A row can carry `category_override` (used when someone types a label in by
+    hand and picks the category themselves). That choice is taken as given.
     """
+    override = row.get("category_override")
+    if override in CATEGORIES:
+        return _result(override, "chosen by the user")
+
     tags = as_list(row.get("categories_tags"))
     text = " ".join(filter(None, [_norm(row.get("product_name")),
                                   _norm(row.get("brands")),

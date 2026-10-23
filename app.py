@@ -17,16 +17,19 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from scoring.additives import register_summary  # noqa: E402
-from scoring.categories import as_list  # noqa: E402
+from scoring.categories import CATEGORIES, as_list  # noqa: E402
+from scoring.custom import (NUTRIENT_FIELDS, input_warnings, parse_number,  # noqa: E402
+                            row_from_inputs)
 from scoring.index import LADDER, score_product  # noqa: E402
 from scoring.ingredients import render_tree  # noqa: E402
+from scoring.limits import LIMITS, daily_shares, serving_grams  # noqa: E402
 from scoring.suggest import better_alternatives  # noqa: E402
 
 DATA = ROOT / "data" / "products.parquet"
 REPORT = ROOT / "data" / "validation_report.json"
 
-VIEWS = ["Search", "Compare", "Browse", "Highest and lowest", "How it works",
-         "Data quality", "About"]
+VIEWS = ["Search", "Compare", "Check a label", "Browse", "Highest and lowest",
+         "How it works", "Data quality", "About"]
 
 ISSUES_URL = "https://github.com/SahilYadav-op/india-food-health-index/issues"
 
@@ -134,38 +137,41 @@ def find_matches(query: str, limit: int = 200) -> list[tuple[str, str, str]]:
     return out
 
 
+def scored_row(record: dict, result) -> dict:
+    """One row of the table the list pages and the suggestions are built from."""
+    sodium = _num(record.get("sodium"))
+    return {
+        "code": record["code"],
+        "product_name": record.get("product_name"),
+        "brands": record.get("brands"),
+        # A record with no name, or only its barcode as a name, can't be shown
+        # in a list of products without looking broken or naming nothing.
+        "named": _is_named(record.get("product_name")),
+        "category": result.category.key if result.category else None,
+        "category_display": result.category.display if result.category else None,
+        "score": result.score,
+        "label": result.band.label if result.band else None,
+        "nutriscore": result.nutri.grade if result.nutri else None,
+        "nova": result.processing.nova_group if result.processing else None,
+        "confidence": result.confidence,
+        "scoreable": result.scoreable,
+        "refusal_reason": result.refusal_reason,
+        "energy_kcal": record.get("energy_kcal"),
+        "sugars": record.get("sugars"),
+        "saturated_fat": record.get("saturated_fat"),
+        "sodium_mg": sodium * 1000 if sodium is not None else None,
+        "fiber": record.get("fiber"),
+        "proteins": record.get("proteins"),
+    }
+
+
 @st.cache_data(show_spinner=False)
 def score_all() -> pd.DataFrame:
     df = load_products()
     if df.empty:
         return df
-    rows = []
-    for record in df.to_dict("records"):
-        result = score_product(record)
-        sodium = _num(record.get("sodium"))
-        rows.append({
-            "code": record["code"],
-            "product_name": record.get("product_name"),
-            "brands": record.get("brands"),
-            # A record with no name, or only its barcode as a name, can't be shown
-            # in a list of products without looking broken or naming nothing.
-            "named": _is_named(record.get("product_name")),
-            "category": result.category.key if result.category else None,
-            "category_display": result.category.display if result.category else None,
-            "score": result.score,
-            "label": result.band.label if result.band else None,
-            "nutriscore": result.nutri.grade if result.nutri else None,
-            "nova": result.processing.nova_group if result.processing else None,
-            "confidence": result.confidence,
-            "scoreable": result.scoreable,
-            "energy_kcal": record.get("energy_kcal"),
-            "sugars": record.get("sugars"),
-            "saturated_fat": record.get("saturated_fat"),
-            "sodium_mg": sodium * 1000 if sodium is not None else None,
-            "fiber": record.get("fiber"),
-            "proteins": record.get("proteins"),
-        })
-    return pd.DataFrame(rows)
+    return pd.DataFrame([scored_row(record, score_product(record))
+                         for record in df.to_dict("records")])
 
 
 # --------------------------------------------------------------------------- #
@@ -187,8 +193,18 @@ def score_chip(score: int, label: str | None = None, *, big: bool = False) -> st
     return chip
 
 
-def open_product(code: str) -> None:
+def set_product(code: str) -> None:
     st.query_params["code"] = code
+
+
+def open_product(code: str) -> None:
+    """Button callback: show a product on the Search page, from any page.
+
+    Only callbacks may change the sidebar's selected page. Changing it from the
+    body of a run, after the sidebar has been drawn, raises an error.
+    """
+    set_product(code)
+    st.session_state["view"] = "Search"
 
 
 def close_product() -> None:
@@ -270,26 +286,75 @@ def render_alternatives(result, record: dict, scored: pd.DataFrame) -> None:
                   args=(alt.code,))
 
 
+def render_daily_limits(record: dict, key: str) -> None:
+    """How much of each daily limit a portion uses up. Arithmetic, not a health claim."""
+    default = serving_grams(record.get("serving_size"))
+    portion = st.number_input(
+        "Portion size (g or ml)", min_value=1.0, max_value=2000.0,
+        value=float(default) if default else 100.0, step=5.0,
+        key=f"portion_{key}_{default or 'x'}",
+        help="Starts at the serving size on the label when there is one, "
+             "otherwise 100 g.")
+    if not default:
+        st.caption("No serving size on this record, so it starts at 100 g.")
+
+    shares = daily_shares(record, portion)
+    if not shares:
+        st.info("There aren't enough numbers on this record to work this out.")
+        return
+
+    st.dataframe(pd.DataFrame([{
+        "Nutrient": s.label,
+        f"In {portion:g} g": f"{round(s.in_portion, 1):g} {s.unit}",
+        "% of daily limit": round(s.percent),
+        "Portions to reach the limit": (f"{s.portions_to_limit:.1f}"
+                                        if s.portions_to_limit else "n/a"),
+    } for s in shares]), hide_index=True, use_container_width=True)
+
+    for s in shares:
+        if s.note:
+            st.caption(f"{s.label}: {s.note}")
+    st.caption(
+        "Limits for an adult on a 2000 kcal diet, from WHO guidance and the "
+        "reference values FSSAI prints on Indian labels:"
+    )
+    for limit in LIMITS:
+        st.caption(f"{limit.label}, {limit.amount:g} {limit.unit} a day. {limit.source}")
+    st.caption(
+        "This compares the numbers with published limits. It doesn't say what "
+        "the product does to anyone. Your own needs may differ, so ask a doctor "
+        "or dietitian."
+    )
+
+
 def render_product(record: dict, scored: pd.DataFrame) -> None:
-    result = score_product(record)
-    name = record.get("product_name") or record.get("code")
+    render_result(record, score_product(record), scored, custom=False)
+
+
+def render_result(record: dict, result, scored: pd.DataFrame, *, custom: bool) -> None:
+    name = record.get("product_name") or ("Your product" if custom else record.get("code"))
 
     st.header(name)
-    st.caption(" · ".join(filter(None, [
-        record.get("brands"),
-        record.get("quantity"),
-        f"barcode {record['code']}",
-        result.category.display if result.category else None,
-    ])))
-    edited = _last_edited(record.get("last_modified_t"))
-    st.caption(
-        "Label data from Open Food Facts"
-        + (f", record last edited {edited}" if edited else "")
-        + f". [See or correct the source record]"
-        f"(https://world.openfoodfacts.org/product/{record['code']}). "
-        "It can be wrong or out of date, so check the pack. The score is an "
-        "automated calculation, not a safety rating or medical advice."
-    )
+    if custom:
+        st.caption(f"{result.category.display} · based on the numbers you entered. "
+                   "Nothing is saved. The score is an automated calculation, not a "
+                   "safety rating or medical advice.")
+    else:
+        st.caption(" · ".join(filter(None, [
+            record.get("brands"),
+            record.get("quantity"),
+            f"barcode {record['code']}",
+            result.category.display if result.category else None,
+        ])))
+        edited = _last_edited(record.get("last_modified_t"))
+        st.caption(
+            "Label data from Open Food Facts"
+            + (f", record last edited {edited}" if edited else "")
+            + f". [See or correct the source record]"
+            f"(https://world.openfoodfacts.org/product/{record['code']}). "
+            "It can be wrong or out of date, so check the pack. The score is an "
+            "automated calculation, not a safety rating or medical advice."
+        )
 
     if not result.scoreable:
         st.warning(f"No score for this product. {result.refusal_reason}")
@@ -317,8 +382,9 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
                 st.caption(f"Without the cap it would have scored "
                            f"{result.uncapped_score}/10.")
 
-        st.button("Compare with other products", on_click=start_compare,
-                  args=(record["code"],))
+        if not custom:
+            st.button("Compare with other products", on_click=start_compare,
+                      args=(record["code"],))
 
     with right:
         st.markdown("**How the score was built**")
@@ -345,23 +411,22 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
                        "score, it only lowers the confidence.")
 
     st.divider()
-    render_alternatives(result, record, scored)
+    # A typed-in label isn't in the table, so add it for the suggestions lookup.
+    typed = {k: v for k, v in scored_row(record, result).items() if v is not None}
+    pool = (pd.concat([scored, pd.DataFrame([typed])], ignore_index=True)
+            if custom else scored)
+    render_alternatives(result, record, pool)
     st.divider()
 
-    tabs = st.tabs(["Nutrition", "WHO screen", "Processing", "Additives",
-                    "Ingredients"])
+    tabs = st.tabs(["Nutrition", "Daily limits", "WHO screen", "Processing",
+                    "Additives", "Ingredients"])
+    t_nutrition, t_daily, t_who, t_proc, t_add, t_ingr = tabs
 
-    with tabs[0]:
+    with t_daily:
+        render_daily_limits(record, str(record["code"]))
+
+    with t_nutrition:
         nutrition_panel(record)
-        if result.rda:
-            st.markdown("**Share of the daily reference value, per 100 g**")
-            st.caption("The same reference values printed on Indian labels: "
-                       "2000 kcal, 67 g fat, 22 g saturated fat, 2 g trans fat, "
-                       "50 g added sugar, 2000 mg sodium.")
-            st.dataframe(
-                pd.DataFrame([{"Nutrient": k.replace("_", " "), "% of daily value": v}
-                              for k, v in result.rda.items()]),
-                hide_index=True, use_container_width=True)
         if result.nutri:
             st.markdown(f"**Nutri-Score {result.nutri.grade}** "
                         f"(score {result.nutri.score:+d}, "
@@ -377,7 +442,7 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
                         "once a product has enough penalty points its protein "
                         "no longer offsets them.")
 
-    with tabs[1]:
+    with t_who:
         searo = result.searo
         if not searo.applicable:
             st.info(searo.note)
@@ -396,7 +461,7 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
                    "children. Here they are only a yardstick, not a ruling on "
                    "any product.")
 
-    with tabs[2]:
+    with t_proc:
         proc = result.processing
         if not proc.confident:
             st.info(proc.reason)
@@ -414,7 +479,7 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
                        "texture. Preservatives, antioxidants and acidity "
                        "regulators don't count.")
 
-    with tabs[3]:
+    with t_add:
         add = result.additives
         if add is None or (not add.known and not add.invalid_codes):
             st.info("No additives found on this label.")
@@ -448,7 +513,7 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
                            "probably a typo: "
                            + ", ".join(c.upper() for c in add.invalid_codes))
 
-    with tabs[4]:
+    with t_ingr:
         if result.label and result.label.ingredients:
             st.code(result.label.text, language=None)
             st.markdown("**How the label was read**")
@@ -487,7 +552,7 @@ def view_search(df: pd.DataFrame, scored: pd.DataFrame) -> None:
                           placeholder="For example: parle, maggi, kurkure",
                           label_visibility="collapsed")
     if picked:
-        open_product(label_to_code[picked])
+        set_product(label_to_code[picked])
         st.rerun()
 
     with st.expander("Search with several words"):
@@ -503,7 +568,7 @@ def view_search(df: pd.DataFrame, scored: pd.DataFrame) -> None:
                 chosen = st.selectbox("Pick one", [m[0] for m in matches],
                                       index=None, key="multi_pick")
                 if chosen:
-                    open_product(label_to_code[chosen])
+                    set_product(label_to_code[chosen])
                     st.rerun()
 
     scoreable = scored[scored.scoreable]
@@ -588,6 +653,96 @@ def view_compare(df: pd.DataFrame) -> None:
         st.dataframe(table.round(1), use_container_width=True)
     st.caption("Green marks the better value in each row: higher for score, fibre "
                "and protein, lower for everything else.")
+
+
+def clear_check() -> None:
+    st.session_state.pop("custom_record", None)
+
+
+def view_check(scored: pd.DataFrame) -> None:
+    st.title("Check a label")
+    st.write(
+        "Type in the numbers from the back of a pack to get a score, and to see "
+        "how much of the daily limits a portion uses up. Nothing you type is saved."
+    )
+
+    categories = {c.display: c.key for c in CATEGORIES.values()
+                  if c.scoreable and c.key != "general"}
+    options = dict(sorted(categories.items())) | {
+        CATEGORIES["general"].display: "general"}
+
+    with st.form("check_label"):
+        name = st.text_input("Product name (optional)")
+        category = st.selectbox(
+            "What kind of product is it?", list(options), index=None,
+            placeholder="Choose the closest match",
+            help="The WHO limits depend on the kind of product. 'Other packaged "
+                 "food' has no WHO limits, so that part is left out.")
+        basis = st.radio("The numbers on the pack are",
+                         ["Per 100 g (or 100 ml)", "Per serving"], horizontal=True)
+        serving = st.text_input(
+            "Serving size in g or ml",
+            help="Needed if the numbers are per serving. Also used for the daily "
+                 "limits.")
+
+        st.markdown("**Nutrition numbers.** Leave a box empty if the pack doesn't "
+                    "show it. An empty box means unknown, not zero.")
+        c1, c2, c3 = st.columns(3)
+        energy = c1.text_input("Energy (kcal)")
+        protein = c2.text_input("Protein (g)")
+        carbs = c3.text_input("Carbohydrate (g)")
+        sugars = c1.text_input("of which sugars (g)")
+        added = c2.text_input("added sugars (g)")
+        fibre = c3.text_input("Dietary fibre (g)")
+        fat = c1.text_input("Total fat (g)")
+        sat = c2.text_input("Saturated fat (g)")
+        trans = c3.text_input("Trans fat (g)")
+        sodium = c1.text_input("Sodium (mg)")
+        salt = c2.text_input("or Salt (g)",
+                             help="If you give both, sodium is used.")
+        ingredients = st.text_area(
+            "Ingredient list (optional)",
+            placeholder="Copy the ingredient list as printed, including INS numbers",
+            help="Without it the score uses the nutrition numbers only, and "
+                 "processing and additives aren't assessed.")
+        submitted = st.form_submit_button("Score it")
+
+    if submitted:
+        raw = {"energy_kcal": energy, "proteins": protein, "carbohydrates": carbs,
+               "sugars": sugars, "added_sugars": added, "fat": fat,
+               "saturated_fat": sat, "trans_fat": trans, "fiber": fibre}
+        try:
+            values = {k: parse_number(v) for k, v in raw.items()}
+            sodium_mg, salt_g, serving_g = (parse_number(sodium), parse_number(salt),
+                                            parse_number(serving))
+        except ValueError as exc:
+            st.error(f"{exc}. Use plain numbers, like 12 or 12.5.")
+            return
+        if not category:
+            st.error("Choose what kind of product it is.")
+            return
+        try:
+            row = row_from_inputs(
+                name=name, category_key=options[category],
+                per_serving=basis == "Per serving", serving_g=serving_g,
+                values=values, sodium_mg=sodium_mg, salt_g=salt_g,
+                ingredients=ingredients)
+        except ValueError as exc:
+            st.error(str(exc))
+            return
+        if serving_g:
+            row["serving_size"] = f"{serving_g:g} g"
+        st.session_state["custom_record"] = row
+
+    row = st.session_state.get("custom_record")
+    if not row:
+        return
+
+    st.divider()
+    for warning in input_warnings(row):
+        st.warning(warning)
+    st.button("Clear and start again", on_click=clear_check)
+    render_result(row, score_product(row), scored, custom=True)
 
 
 def view_browse(scored: pd.DataFrame) -> None:
@@ -687,6 +842,23 @@ def view_how() -> None:
 | Nutri-Score E | 4 |
 """)
 
+    st.subheader("Daily limits")
+    st.write(
+        "Each product page also has a Daily limits tab. It shows how much of the "
+        "daily limits for sodium, added sugar, saturated fat, trans fat and total "
+        "fat a portion uses up, and how many portions it would take to reach each "
+        "one. The limits are for an adult on a 2000 kcal diet. They come from WHO "
+        "guidance and match the reference values FSSAI prints on Indian labels."
+    )
+    st.write(
+        "This is not part of the 1 to 10 score. Daily limits only make sense for "
+        "a portion, and only about half of the products have a serving size on "
+        "record. The score already uses WHO's limits per 100 g for the product's "
+        "category, and adding the daily limits as well would count the same "
+        "sodium and sugar twice. It is also only arithmetic against published "
+        "numbers. It doesn't say what a product does to anyone."
+    )
+
     st.subheader("The scale")
     st.dataframe(pd.DataFrame([
         {"Score": b.score, "Rating": b.label, "Meaning": b.meaning}
@@ -721,12 +893,34 @@ def view_how() -> None:
     )
 
 
-def view_data_quality() -> None:
+def _refusal_group(reason: str) -> str:
+    if "incomplete" in reason:
+        return "A core number is missing from the nutrition panel"
+    if "doesn't look right" in reason:
+        return "The panel doesn't add up (for example 0 sodium in a biscuit)"
+    return "A kind of product that isn't scored (supplement, spice, infant food...)"
+
+
+def view_data_quality(scored: pd.DataFrame) -> None:
     st.title("Data quality")
     st.write(
-        "Crowd-sourced label data has mistakes, and a score built on a bad "
-        "nutrition panel is worse than no score. Here is what was checked."
+        "This page is about the data itself: the product records pulled from "
+        "Open Food Facts through its public API, what was wrong with them, and "
+        "what was done about it. It isn't about the app's code. Crowd-sourced "
+        "label data has mistakes, and a score built on a bad nutrition panel is "
+        "worse than no score."
     )
+
+    refused = scored[~scored.scoreable]
+    st.subheader("Products with no score, and why")
+    st.write(f"{len(refused):,} of {len(scored):,} products get no score. This is "
+             "decided when a product is scored, so it is separate from the "
+             "records dropped when the data was pulled.")
+    groups = refused.refusal_reason.fillna("").map(_refusal_group).value_counts()
+    st.dataframe(pd.DataFrame({"Reason": groups.index, "Products": groups.values}),
+                 hide_index=True, use_container_width=True)
+
+    st.subheader("When the data was pulled")
     if REPORT.exists():
         report = json.loads(REPORT.read_text(encoding="utf-8"))
         a, b, c, d = st.columns(4)
@@ -887,6 +1081,8 @@ if view == "Search":
     view_search(df, scored)
 elif view == "Compare":
     view_compare(df)
+elif view == "Check a label":
+    view_check(scored)
 elif view == "Browse":
     view_browse(scored)
 elif view == "Highest and lowest":
@@ -894,6 +1090,6 @@ elif view == "Highest and lowest":
 elif view == "How it works":
     view_how()
 elif view == "Data quality":
-    view_data_quality()
+    view_data_quality(scored)
 else:
     view_about()
