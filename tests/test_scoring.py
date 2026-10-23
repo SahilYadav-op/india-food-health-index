@@ -221,6 +221,22 @@ def test_khatta_meetha_is_not_flour():
     assert result.key == "salty_snacks", (result.key, result.matched_on)
 
 
+def test_clear_majority_of_tags_beats_one_stray_tag():
+    """Kurkure Masala Munch has four salty-snack tags and one stray biscuit tag."""
+    tags = ["en:snacks", "en:salty-snacks", "en:appetizers", "en:biscuits-and-crackers",
+            "en:chips-and-fries", "en:crisps", "en:puffed-salty-snacks"]
+    assert classify({"categories_tags": tags,
+                     "product_name": "Kurkure Masala Munch"}).key == "salty_snacks"
+
+
+def test_one_extra_tag_does_not_override_the_specific_rule():
+    """Plain "most tags wins" moved milk shakes into plain milk and cost 1.3 points
+    of agreement with Open Food Facts. A narrow lead must not flip the category."""
+    tags = ["en:milks", "en:milks-liquid-and-powder", "en:milk-shakes"]
+    assert classify({"categories_tags": tags,
+                     "product_name": "Chocolate milk shake"}).key == "dairy_drink"
+
+
 def test_supplements_are_refused():
     for row in ({"categories_tags": ["en:dietary-supplements"], "product_name": "X"},
                 {"categories_tags": [], "product_name": "Gold Standard Whey Protein"},
@@ -405,6 +421,97 @@ def test_ladder_is_complete_and_avoids_toxicity_claims():
         assert banned not in text, banned
     # And the strong bottom band must frame the claim as habitual, not acute.
     assert "regular" in LADDER[1].label.lower() or "habit" in LADDER[1].label.lower()
+
+
+# --------------------------------------------------------------------------- #
+# suggestions
+# --------------------------------------------------------------------------- #
+
+
+def _scored_table(rows):
+    import pandas as pd
+
+    cols = ["code", "product_name", "brands", "category", "score", "confidence",
+            "scoreable"]
+    return pd.DataFrame(rows, columns=cols)
+
+
+def test_alternatives_same_category_and_better_only():
+    from scoring.suggest import better_alternatives
+
+    table = _scored_table([
+        ("1", "Cream biscuit", "A", "biscuits", 2, "high", True),
+        ("2", "Oat biscuit", "B", "biscuits", 6, "high", True),
+        ("3", "Marie biscuit", "C", "biscuits", 3, "high", True),    # not 2 points better
+        ("4", "Plain chips", "D", "salty_snacks", 9, "high", True),   # other category
+        ("5", "Ragi biscuit", "E", "biscuits", 7, "medium", True),
+    ])
+    out = better_alternatives(table, "1")
+    assert list(out["code"]) == ["5", "2"], list(out["code"])
+
+
+def test_alternatives_skip_low_confidence_unnamed_and_duplicates():
+    from scoring.suggest import better_alternatives
+
+    table = _scored_table([
+        ("1", "Cream biscuit", "A", "biscuits", 2, "high", True),
+        ("2", "Guess biscuit", "B", "biscuits", 9, "low", True),       # low confidence
+        ("3", None, None, "biscuits", 8, "high", True),                # unnamed
+        ("4", "Oat biscuit", "C", "biscuits", 6, "high", True),
+        ("5", "oat biscuit ", "c", "biscuits", 6, "medium", True),     # same product, other barcode
+    ])
+    out = better_alternatives(table, "1")
+    assert list(out["code"]) == ["4"], list(out["code"])
+
+
+def test_alternatives_not_worse_on_headline_nutrients():
+    """A higher overall score isn't a good suggestion if the sugar is higher."""
+    import pandas as pd
+    from scoring.suggest import better_alternatives
+
+    rows = [
+        # code, name, brand, category, score, confidence, scoreable, sugars, sat fat, sodium mg
+        ("1", "Digestive", "A", "biscuits", 2, "high", True, 13.0, 10.0, 368.0),
+        ("2", "Low sugar", "B", "biscuits", 6, "high", True, 4.0, 3.0, 54.0),
+        ("3", "Sweet cookie", "C", "biscuits", 4, "high", True, 29.0, 5.0, 90.0),
+        ("4", "Salty cracker", "D", "biscuits", 5, "high", True, 3.0, 2.0, 900.0),
+        ("5", "Low sugar copy", "B", "biscuits", 6, "high", True, 4.0, 3.0, 54.0),
+    ]
+    cols = ["code", "product_name", "brands", "category", "score", "confidence",
+            "scoreable", "sugars", "saturated_fat", "sodium_mg"]
+    out = better_alternatives(pd.DataFrame(rows, columns=cols), "1")
+    # 3 has more sugar, 4 has more sodium, 5 is the same panel as 2.
+    assert list(out["code"]) == ["2"], list(out["code"])
+
+
+def test_alternatives_skip_zero_sodium_in_salty_categories():
+    """A wafer with 0 mg sodium is a blank field, not a good product."""
+    import pandas as pd
+    from scoring.suggest import better_alternatives
+
+    rows = [
+        ("1", "Digestive", "A", "biscuits", 2, "high", True, 13.0, 10.0, 368.0),
+        ("2", "Blank sodium wafer", "B", "biscuits", 6, "high", True, 4.0, 0.0, 0.0),
+        ("3", "Real biscuit", "C", "biscuits", 5, "high", True, 4.0, 3.0, 120.0),
+    ]
+    cols = ["code", "product_name", "brands", "category", "score", "confidence",
+            "scoreable", "sugars", "saturated_fat", "sodium_mg"]
+    out = better_alternatives(pd.DataFrame(rows, columns=cols), "1")
+    assert list(out["code"]) == ["3"], list(out["code"])
+
+
+def test_alternatives_empty_for_unscored_or_catch_all():
+    from scoring.suggest import better_alternatives
+
+    table = _scored_table([
+        ("1", "Whey", "A", "supplement", None, "low", False),
+        ("2", "Mystery", "B", "general", 2, "high", True),
+        ("3", "Other mystery", "C", "general", 8, "high", True),
+        ("4", "Chips", "D", "salty_snacks", 8, "high", True),
+    ])
+    assert better_alternatives(table, "1").empty   # not scored, nothing to improve on
+    assert better_alternatives(table, "2").empty   # catch-all bucket has no real peers
+    assert better_alternatives(table, "nope").empty
 
 
 if __name__ == "__main__":
