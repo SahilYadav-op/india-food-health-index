@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from .categories import SALT_ALWAYS_PRESENT
+
 CONFIDENCE_RANK = {"high": 2, "medium": 1, "low": 0}
 
 # "general" is the catch-all bucket for products that matched no real category,
@@ -16,11 +18,8 @@ NO_PEER_GROUP = {"general"}
 HEADLINE_NUTRIENTS = ("sugars", "saturated_fat", "sodium_mg")
 TOLERANCE = 1.10
 
-# In these categories a sodium value of exactly 0 almost always means the field
-# was left blank, not that the product has no salt (a wafer or a biscuit always
-# does). Such records look great on paper, so they are never suggested.
-SALT_ALWAYS_PRESENT = {"biscuits", "salty_snacks", "bread_bakery", "noodles_pasta",
-                       "cheese", "condiments", "ready_meal"}
+# In those categories a sodium value of 0 is a blank field, and such records look
+# great on paper, so they are never suggested. (Scoring refuses them too.)
 
 
 def better_alternatives(scored: pd.DataFrame, code: str, n: int = 5,
@@ -47,6 +46,9 @@ def better_alternatives(scored: pd.DataFrame, code: str, n: int = 5,
         & (scored["code"] != code)
         & scored["product_name"].notna()
     ]
+    # A record whose "name" is just its barcode can't be recommended to anyone.
+    if "named" in pool.columns:
+        pool = pool[pool["named"].astype(bool)]
     pool = pool[pool["score"] >= me["score"] + min_gain]
     pool = pool[pool["confidence"].map(CONFIDENCE_RANK).fillna(0) >= 1]
 

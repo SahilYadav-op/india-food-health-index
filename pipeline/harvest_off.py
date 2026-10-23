@@ -50,13 +50,16 @@ DUMP_URL = "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.
 # User-Agent is the one thing that reliably gets a project blocked.
 USER_AGENT = (
     "IndiaFoodHealthIndex/0.1 (student research project; "
-    "https://github.com/sahil/india-food-health-index; sahilyadav.sy2004@gmail.com)"
+    "https://github.com/SahilYadav-op/india-food-health-index; sahilyadav.sy2004@gmail.com)"
 )
 
-# Documented OFF limits: 100 req/min for product reads, 10 req/min for search.
-# We deliberately sit under both.
-PRODUCT_DELAY_S = 0.75  # -> 80 req/min
-SEARCH_DELAY_S = 6.5  # -> ~9 req/min
+# Open Food Facts' documented limits are 15 requests a minute per IP for product
+# reads and 10 a minute for search. These delays keep under both. (An earlier
+# version waited 0.75 s between product reads, about 80 a minute, which is over
+# the limit and produced a long run of HTTP 429 responses.) For anything bigger
+# than a few thousand products, use `--source dump` instead of the API.
+PRODUCT_DELAY_S = 4.5  # about 13 requests a minute
+SEARCH_DELAY_S = 6.5  # about 9 requests a minute
 
 # Fields we ask the product API for. Keep this list tight: OFF documents that
 # requesting fewer fields is materially cheaper on their side.

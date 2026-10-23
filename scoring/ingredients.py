@@ -237,6 +237,11 @@ ADDITIVE_NAMES: dict[str, str] = {
     "gelatine": "e441",
 }
 
+_NUTRITION_TABLE = re.compile(
+    r"nutrition(?:al)?\s+(?:information|facts|value)|typical values|serving size",
+    re.IGNORECASE,
+)
+
 PERCENT_PATTERN = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 
 # Placeholder used to hide INS sub-part parens from the paren splitter.
@@ -483,7 +488,17 @@ def parse_ingredients(text: str | None) -> ParsedLabel:
     if not text or not str(text).strip():
         return ParsedLabel(text="", ingredients=[], parse_failed=True)
 
-    original = normalise_text(str(text))
+    raw = str(text)
+    # Some contributors type one ingredient per line instead of using commas.
+    # Flattening the newlines into spaces would merge the whole list into one item.
+    if raw.count("\n") > raw.count(","):
+        raw = raw.replace("\n", ", ")
+    # Others paste the nutrition table into the ingredients field. Everything from
+    # there on is not an ingredient.
+    cut = _NUTRITION_TABLE.search(raw)
+    if cut and cut.start() > 15:
+        raw = raw[: cut.start()]
+    original = normalise_text(raw)
 
     # 1. A full stop ends a clause on these labels ("... INS 223. CONTAINS ..."),
     #    but must not split a decimal. Convert clause-ending stops to semicolons

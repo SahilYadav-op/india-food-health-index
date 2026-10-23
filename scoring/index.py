@@ -48,23 +48,16 @@ would be the easiest thing for a reviewer to catch:
 
 WHO SEARO is a binary pass/fail model and publishes no severity scale, so ANY
 conversion of it into a graded subscore requires an unsourced choice. The weights
-are ordered by evidence strength, which is defensible, but the specific values are
-a judgement. These must be declared as such and tested: the evaluation plan
-includes an ablation that reports how the score distribution moves at weights of
-0.40/0.30/0.20/0.10 and 0.60/0.20/0.10/0.10, and at 15 / 25 / 35 points per
-breach. A model whose conclusions survive that is honest; one that does not was
-never measuring what it claimed.
+are ordered by evidence strength, but the specific values are a judgement, and
+should be tested by moving them (for example weights of 0.40/0.30/0.20/0.10 and
+0.60/0.20/0.10/0.10, and 15 or 35 points per breach) and seeing what changes.
 
-ON THE LANGUAGE AT THE BOTTOM OF THE SCALE. A 1/10 label reads "harmful as a
-regular part of your diet" rather than "toxic" or "will destroy your health". This
-is deliberate and it is not timidity. No single packaged food sold legally in India
-is toxic at normal intake - every additive in these products sits inside a JECFA or
-FSSAI limit - and the entire evidence base here is about dietary PATTERNS, not
-single items. Claiming toxicity would be scientifically indefensible, would fail
-the first question any examiner asks, and in India would risk falling foul of ASCI
-advertising rules and the FSSAI prohibition on disease claims. The honest strong
-statement is about habitual consumption, and it is available at the bottom of the
-ladder.
+ON THE WORDING OF THE SCALE. Each rung says what the model scored ("Scores low"),
+never what the product does to a person. A score is a calculation anyone can
+reproduce from the label data. A word like "poor" or "harmful" about a named
+product is a claim of fact about the product, and this project has no way to
+prove it. The evidence behind the models is about long-term eating patterns, not
+single products.
 """
 
 from __future__ import annotations
@@ -72,7 +65,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .additives import AdditiveAssessment, additive_risk
-from .categories import CategoryResult, as_list, classify
+from .categories import SALT_ALWAYS_PRESENT, CategoryResult, as_list, classify
 from .ingredients import ParsedLabel, parse_ingredients
 from .nutrients import (NutriScore, SearoResult, nutri_score, num,
                         rda_contribution, searo_screen)
@@ -131,46 +124,46 @@ class Band:
     basis: str
 
 
+# Every rung describes what the MODEL scored, never what the product does to a
+# person. "Scores low" is a statement about a calculation anyone can reproduce;
+# "harmful" or "poor" said about a named product is a claim of fact about the
+# product, which this project has no way to prove.
 LADDER: dict[int, Band] = {b.score: b for b in [
     Band(10, "Excellent",
-         "Fits into daily eating with no reservations.",
+         "Scores at the top on every part of the model.",
          "Nutri-Score A on the 2023 algorithm, minimally processed (NOVA 1-2), no "
-         "penalised additives, and inside every WHO SEARO threshold for its category."),
+         "penalised additives, and inside every WHO limit for its category."),
     Band(9, "Very good",
-         "A genuinely good everyday choice.",
-         "Nutri-Score A or high B, little or no processing, and no WHO SEARO breach."),
+         "Scores high, with no WHO limits exceeded.",
+         "Nutri-Score A or high B, little or no processing, no WHO limit exceeded."),
     Band(8, "Good",
-         "Sound for regular eating; nothing here needs limiting.",
-         "Nutri-Score B, no threshold breaches. Capped here if ultra-processed, "
-         "because NOVA group 4 alone rules out the top two bands."),
-    Band(7, "Reasonable",
-         "Fine as part of a varied diet. Worth reading the panel.",
-         "Nutri-Score B or C with no more than one WHO SEARO threshold breached. "
-         "One breach caps a product here."),
-    Band(6, "Okay in moderation",
-         "No reason to avoid it, but it should not be a staple.",
-         "Nutri-Score C, or an otherwise better product carrying a colour that the "
-         "EU requires a child-behaviour warning on."),
+         "Scores well, with no WHO limits exceeded.",
+         "Nutri-Score B, no WHO limit exceeded. Ultra-processed products stop here, "
+         "because NOVA group 4 rules out the top two rungs."),
+    Band(7, "Fairly good",
+         "Scores above the middle. At most one WHO limit is exceeded.",
+         "Nutri-Score B or C with no more than one WHO limit exceeded."),
+    Band(6, "Fair",
+         "Scores a little above the middle.",
+         "Nutri-Score C, or a higher-scoring product whose ingredient list includes "
+         "a colour the EU puts a child-behaviour warning on."),
     Band(5, "Average",
-         "Middling. Portion size is doing most of the work here.",
-         "Nutri-Score C or D, or two WHO SEARO thresholds breached."),
+         "Scores in the middle of the scale.",
+         "Nutri-Score C or D, or two WHO limits exceeded."),
     Band(4, "Below average",
-         "Better as an occasional item than a habit.",
-         "Nutri-Score D or E, or three or more WHO SEARO thresholds breached."),
-    Band(3, "Poor",
-         "A treat food. Frequent eating is the problem, not one packet.",
-         "Nutri-Score D or E with heavy processing, or a WHO SEARO blanket "
-         "exclusion such as trans fat above 1% of energy."),
-    Band(2, "Very poor",
-         "Keep this rare rather than regular.",
-         "Nutri-Score E, ultra-processed, and multiple thresholds breached."),
-    Band(1, "Harmful as a regular habit",
-         "Not toxic in one packet, but genuinely harmful as a routine part of your "
-         "diet.",
-         "Worst on every pillar at once: Nutri-Score E, ultra-processed with many "
-         "markers, penalised additives, and several WHO SEARO breaches. The claim "
-         "is about habitual intake - the evidence base is dietary patterns, not "
-         "single items."),
+         "Scores below the middle. Several WHO limits may be exceeded.",
+         "Nutri-Score D or E, or three or more WHO limits exceeded."),
+    Band(3, "Low",
+         "Scores low. Several WHO limits are exceeded or it is heavily processed.",
+         "Nutri-Score D or E with heavy processing, or a WHO exclusion such as "
+         "trans fat above 1% of energy."),
+    Band(2, "Very low",
+         "Scores very low on most parts of the model.",
+         "Nutri-Score E, ultra-processed, and several WHO limits exceeded."),
+    Band(1, "Lowest",
+         "Scores lowest on every part of the model.",
+         "Lowest on all four parts at once: Nutri-Score E, ultra-processed with many "
+         "markers, penalised additives, and several WHO limits exceeded."),
 ]}
 
 
@@ -274,6 +267,33 @@ def data_tier(row: dict, label: ParsedLabel) -> int:
     return 2
 
 
+def implausible_panel(row: dict, category: CategoryResult) -> str | None:
+    """Why a panel that is technically complete still can't be trusted, if it can't.
+
+    Missing values are caught by data_tier. This catches values that are present
+    but are almost certainly blanks entered as zero. They are the dangerous ones,
+    because a zero scores as the best possible case and flatters the product.
+    """
+    sodium = num(row.get("sodium"))
+    fat = num(row.get("fat"))
+    sat = num(row.get("saturated_fat"))
+
+    if category.key in SALT_ALWAYS_PRESENT and sodium == 0:
+        return (f"Sodium is listed as 0, which isn't realistic for "
+                f"{category.display.lower()}. The field was probably left blank, "
+                "and scoring it would flatter the product.")
+    if fat is not None and fat >= 10 and sat == 0:
+        return ("Saturated fat is listed as 0 although total fat is above 10 g, "
+                "which doesn't add up. One of the two numbers is probably wrong.")
+    if category.family not in ("beverage", "water"):
+        core = [num(row.get(k)) for k in ("energy_kcal", "fat", "carbohydrates",
+                                          "proteins")]
+        if all(v == 0 for v in core):
+            return ("Every value on the panel is 0, which usually means the panel "
+                    "was never filled in.")
+    return None
+
+
 def score_product(row: dict) -> IndexResult:
     """Compute the full 1-10 index for one product row.
 
@@ -302,6 +322,15 @@ def score_product(row: dict) -> IndexResult:
                            f"missing {', '.join(missing)}. Scoring it would mean "
                            "guessing, and a guessed health score is worse than "
                            "none.",
+        )
+
+    problem = implausible_panel(row, category)
+    if problem:
+        return IndexResult(
+            scoreable=False, score=None, band=None, composite_0_100=None,
+            category=category, label=label, tier=tier,
+            refusal_reason="The nutrition panel for this product doesn't look "
+                           f"right. {problem}",
         )
 
     ecodes = sorted(set(as_list(row.get("additives"))) | set(label.ecodes))
@@ -376,33 +405,31 @@ def score_product(row: dict) -> IndexResult:
     n_breach = len(searo.breaches)
     if searo.exclusions:
         caps.append(Cap(CAP_SEARO_EXCLUSION,
-                        "Breaches a WHO SEARO blanket exclusion: "
+                        "The data falls under one of WHO's exclusions: "
                         + "; ".join(searo.exclusions)))
     if n_breach >= 3:
         caps.append(Cap(CAP_SEARO_3,
-                        f"{n_breach} WHO SEARO thresholds exceeded for its category"))
+                        f"Over {n_breach} of WHO's limits for this category"))
     elif n_breach == 2:
-        caps.append(Cap(CAP_SEARO_2,
-                        "Two WHO SEARO thresholds exceeded for its category"))
+        caps.append(Cap(CAP_SEARO_2, "Over two of WHO's limits for this category"))
     elif n_breach == 1:
         field_name, value, limit = searo.breaches[0]
         pretty = field_name.replace("_", " ").replace(" g", "")
         caps.append(Cap(CAP_SEARO_1,
-                        f"Exceeds the WHO SEARO {pretty} threshold for its category "
-                        f"({value:g} vs {limit:g}), so WHO would not permit it to be "
-                        f"marketed to children"))
+                        f"Over WHO's {pretty} limit for this category "
+                        f"({value:g} against {limit:g} per 100 g)"))
     if proc.nova_group == 4:
         caps.append(Cap(CAP_NOVA4,
-                        "Ultra-processed (NOVA group 4), which rules out the top "
-                        "two bands whatever the nutrient profile"))
+                        "Its ingredient list puts it in NOVA group 4 "
+                        "(ultra-processed), which limits the score to 8"))
     southampton = sorted(set(ecodes) & SOUTHAMPTON)
     if southampton:
         caps.append(Cap(CAP_SOUTHAMPTON,
-                        "Contains "
+                        "The ingredient list in this data includes "
                         + ", ".join(c.upper() for c in southampton)
-                        + " - a colour the EU requires a child-behaviour warning on"))
+                        + ", a colour the EU puts a child-behaviour warning on"))
     if nutri.grade == "E":
-        caps.append(Cap(CAP_NUTRISCORE_E, "Nutri-Score E, the worst published grade"))
+        caps.append(Cap(CAP_NUTRISCORE_E, "Nutri-Score E, the lowest grade"))
 
     final = raw_score
     binding: Cap | None = None

@@ -360,10 +360,17 @@ SEARO: dict[str, SearoThresholds | None] = {
     "condiments": SearoThresholds(total_fat=12.0, total_sugars=10.0,
                                   sodium_g=0.30),
     "spreads": SearoThresholds(total_fat=12.0, total_sugars=10.0, sodium_g=0.30),
-    "milk": None,
+    # WHO row "milk and dairy-based drinks". Written for ready-to-drink milk; see
+    # LIQUID_MILK_MAX_KCAL in searo_screen for why powders and cream are skipped.
+    "milk": SearoThresholds(total_fat=7.0, added_sugars=0.0,
+                            note="milk and dairy-based drinks"),
     "water": SearoThresholds(always_permitted=True),
     "general": None,
 }
+
+# Above this, "milk" is a powder, cream or condensed milk, not a drink. Whole
+# buffalo milk is about 100 kcal per 100 ml.
+LIQUID_MILK_MAX_KCAL = 150
 
 # SEARO's blanket exclusions (section 2.3). A product breaching any of these may
 # not be marketed to children regardless of its nutrient thresholds.
@@ -397,8 +404,20 @@ def searo_screen(row: dict, category_key: str,
     thresholds = SEARO.get(category_key)
     if thresholds is None:
         return SearoResult(applicable=False,
-                           note="WHO SEARO defines no thresholds for this "
-                                "category, so this screen is not applied.")
+                           note="WHO's model has no limits for this kind of "
+                                "product, so this check isn't used. The score is "
+                                "built from the other three parts.")
+
+    # WHO's milk row is for ready-to-drink milk. Powders and cream are scored by
+    # WHO as reconstituted, which can't be done from a label, so they're skipped
+    # instead of being held to a limit written for a different product.
+    if category_key == "milk":
+        energy = num(row.get("energy_kcal"))
+        if energy is None or energy > LIQUID_MILK_MAX_KCAL:
+            return SearoResult(applicable=False,
+                               note="WHO's limit for milk is written for "
+                                    "ready-to-drink milk. This looks like a "
+                                    "powder or cream, so it isn't applied.")
     if thresholds.always_permitted:
         return SearoResult(applicable=True, note="Always permitted under WHO SEARO.")
 
@@ -418,9 +437,9 @@ def searo_screen(row: dict, category_key: str,
     codes = {c.lower() for c in (ecodes or [])}
     if codes & NNS_CODES:
         exclusions.append(
-            "Contains a non-sugar sweetener. WHO SEARO excludes any product with "
-            "an added non-sugar sweetener from marketing to children, including "
-            "sugar alcohols."
+            "The ingredient list in this data includes a non-sugar sweetener. "
+            "WHO's model excludes products with an added non-sugar sweetener "
+            "(sugar alcohols too) from marketing to children."
         )
 
     trans = num(row.get("trans_fat"))
@@ -429,8 +448,8 @@ def searo_screen(row: dict, category_key: str,
         trans_energy_pct = (trans * 9 / energy) * 100
         if trans_energy_pct > SEARO_TRANS_FAT_ENERGY_PCT:
             exclusions.append(
-                f"Trans fat supplies {trans_energy_pct:.1f}% of this product's "
-                f"energy, above the 1% ceiling."
+                f"In this data, trans fat supplies {trans_energy_pct:.1f}% of the "
+                f"energy, above WHO's 1% limit."
             )
 
     return SearoResult(applicable=True, breaches=breaches, exclusions=exclusions,

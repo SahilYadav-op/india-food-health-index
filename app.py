@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -24,8 +25,10 @@ from scoring.suggest import better_alternatives  # noqa: E402
 DATA = ROOT / "data" / "products.parquet"
 REPORT = ROOT / "data" / "validation_report.json"
 
-VIEWS = ["Search", "Compare", "Browse", "Best and worst", "How it works",
-         "Data quality"]
+VIEWS = ["Search", "Compare", "Browse", "Highest and lowest", "How it works",
+         "Data quality", "About"]
+
+ISSUES_URL = "https://github.com/SahilYadav-op/india-food-health-index/issues"
 
 st.set_page_config(page_title="India Food Health Index", layout="wide",
                    initial_sidebar_state="expanded")
@@ -61,6 +64,21 @@ def _num(value) -> float | None:
     except (TypeError, ValueError):
         return None
     return None if f != f else f
+
+
+def _is_named(name) -> bool:
+    if not isinstance(name, str):
+        return False
+    name = name.strip()
+    return bool(name) and not name.isdigit() and name.lower() not in {"none", "null", "n/a"}
+
+
+def _last_edited(value) -> str | None:
+    """'Mar 2024' from a Unix timestamp, or None."""
+    v = _num(value)
+    if v is None or v <= 0:
+        return None
+    return datetime.fromtimestamp(v, tz=timezone.utc).strftime("%b %Y")
 
 
 def _fmt(value, unit: str = "") -> str:
@@ -129,6 +147,9 @@ def score_all() -> pd.DataFrame:
             "code": record["code"],
             "product_name": record.get("product_name"),
             "brands": record.get("brands"),
+            # A record with no name, or only its barcode as a name, can't be shown
+            # in a list of products without looking broken or naming nothing.
+            "named": _is_named(record.get("product_name")),
             "category": result.category.key if result.category else None,
             "category_display": result.category.display if result.category else None,
             "score": result.score,
@@ -214,7 +235,7 @@ def nutrition_panel(record: dict) -> None:
 
 
 def render_alternatives(result, record: dict, scored: pd.DataFrame) -> None:
-    st.subheader("Better options in this category")
+    st.subheader("Higher-scoring products in this category")
     alts = better_alternatives(scored, record["code"])
     if alts.empty:
         if result.score >= 8:
@@ -260,6 +281,15 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
         f"barcode {record['code']}",
         result.category.display if result.category else None,
     ])))
+    edited = _last_edited(record.get("last_modified_t"))
+    st.caption(
+        "Label data from Open Food Facts"
+        + (f", record last edited {edited}" if edited else "")
+        + f". [See or correct the source record]"
+        f"(https://world.openfoodfacts.org/product/{record['code']}). "
+        "It can be wrong or out of date, so check the pack. The score is an "
+        "automated calculation, not a safety rating or medical advice."
+    )
 
     if not result.scoreable:
         st.warning(f"No score for this product. {result.refusal_reason}")
@@ -361,9 +391,10 @@ def render_product(record: dict, scored: pd.DataFrame) -> None:
             for exclusion in searo.exclusions:
                 st.markdown(f"- {exclusion}")
         st.caption("WHO's nutrient profile model for South-East Asia. Each "
-                   "nutrient is pass or fail for the product's category. Going "
-                   "over any limit means WHO would not allow it to be marketed "
-                   "to children.")
+                   "nutrient has a limit for the product's category. WHO designed "
+                   "the limits to decide which foods shouldn't be marketed to "
+                   "children. Here they are only a yardstick, not a ruling on "
+                   "any product.")
 
     with tabs[2]:
         proc = result.processing
@@ -477,9 +508,11 @@ def view_search(df: pd.DataFrame, scored: pd.DataFrame) -> None:
 
     scoreable = scored[scored.scoreable]
     a, b, c = st.columns(3)
-    a.metric("Products", f"{len(df):,}")
+    a.metric("Products in this dataset", f"{len(df):,}")
     b.metric("With a score", f"{len(scoreable):,}")
     c.metric("Average score", f"{scoreable.score.mean():.1f} / 10")
+    st.caption("Only products that people have added to Open Food Facts, so this "
+               "isn't a picture of the whole market.")
 
     st.markdown("#### Try one")
     examples = ["8901719134845", "8901491100519", "8901063142022",
@@ -559,28 +592,28 @@ def view_compare(df: pd.DataFrame) -> None:
 
 def view_browse(scored: pd.DataFrame) -> None:
     st.title("Browse")
-    scoreable = scored[scored.scoreable]
+    scoreable = scored[scored.scoreable & scored.named]
 
     cats = ["All categories"] + sorted(scoreable.category_display.dropna().unique().tolist())
     c1, c2, c3 = st.columns([2, 2, 2])
     chosen = c1.selectbox("Category", cats)
     min_conf = c2.select_slider("Minimum confidence", ["low", "medium", "high"],
                                 value="low")
-    sort_by = c3.selectbox("Sort by", ["Best first", "Worst first", "Name"])
+    sort_by = c3.selectbox("Sort by", ["Highest first", "Lowest first", "Name"])
 
     subset = scoreable if chosen == "All categories" else \
         scoreable[scoreable.category_display == chosen]
     order = {"low": 0, "medium": 1, "high": 2}
     subset = subset[subset.confidence.map(order) >= order[min_conf]]
-    if sort_by == "Best first":
+    if sort_by == "Highest first":
         subset = subset.sort_values("score", ascending=False)
-    elif sort_by == "Worst first":
+    elif sort_by == "Lowest first":
         subset = subset.sort_values("score")
     else:
         subset = subset.sort_values("product_name")
 
-    st.caption(f"{len(subset)} products. Compare within a category: the least bad "
-               "biscuit is a real choice, a biscuit against water is not.")
+    st.caption(f"{len(subset)} products. Compare within a category: two biscuits "
+               "can be compared, a biscuit and a bottle of water can't.")
     st.dataframe(
         subset[["score", "label", "product_name", "brands", "category_display",
                 "nutriscore", "nova", "confidence", "energy_kcal", "sugars",
@@ -594,21 +627,22 @@ def view_browse(scored: pd.DataFrame) -> None:
         hide_index=True, use_container_width=True, height=560)
 
 
-def view_best_worst(scored: pd.DataFrame) -> None:
-    st.title("Best and worst by category")
-    st.caption("Products with low-confidence scores are left out of these lists.")
-    pool = scored[(scored.scoreable) & (scored.confidence != "low")]
+def view_highest_lowest(scored: pd.DataFrame) -> None:
+    st.title("Highest and lowest scores by category")
+    st.caption("Scores come from label data on Open Food Facts, which can be wrong "
+               "or out of date. Products with low-confidence scores are left out.")
+    pool = scored[scored.scoreable & scored.named & (scored.confidence != "low")]
     for cat in sorted(pool.category_display.dropna().unique()):
         sub = pool[pool.category_display == cat]
         if len(sub) < 4:
             continue
         with st.expander(f"{cat} ({len(sub)} products)"):
             a, b = st.columns(2)
-            a.markdown("**Best**")
+            a.markdown("**Highest scores**")
             for r in sub.nlargest(5, "score").itertuples():
                 a.markdown(score_chip(int(r.score), r.product_name or r.code),
                            unsafe_allow_html=True)
-            b.markdown("**Worst**")
+            b.markdown("**Lowest scores**")
             for r in sub.nsmallest(5, "score").itertuples():
                 b.markdown(score_chip(int(r.score), r.product_name or r.code),
                            unsafe_allow_html=True)
@@ -664,8 +698,8 @@ def view_how() -> None:
 - **MSG isn't penalised.** The scare started with a 1968 letter and blinded trials haven't reproduced the symptoms. It also has about a third of the sodium of table salt by weight, and any sodium is already counted from the nutrition panel. Saccharin and food-grade carrageenan get no penalty for similar reasons.
 - **Palm oil has no penalty of its own.** Its effect on cholesterol comes from its saturated fat, which is already counted.
 - **Some products get no score:** supplements, spices, infant food, cooking ingredients and alcohol. A protein powder looks perfect on every nutrient model, and spices are eaten by the gram.
-- **No score if the nutrition panel is incomplete.** A guessed score is worse than none.
-- **Nothing is called toxic.** The lowest rating says "harmful as a regular habit", because the evidence is about long-term eating patterns, not one packet.
+- **No score if the nutrition panel is incomplete or doesn't add up.** That includes a biscuit or a sauce listed with 0 sodium, which is almost always a blank field. A guessed score is worse than none.
+- **The scale describes the score, not the product.** Nothing is called harmful, unhealthy or toxic. The score comes from label data and published methods, and says nothing about whether a product is safe.
 """)
 
     st.subheader("What is a judgement call")
@@ -680,9 +714,10 @@ def view_how() -> None:
 
     st.subheader("Where the data comes from")
     st.write(
-        "Product data is from Open Food Facts, an open, crowd-sourced database "
-        "(ODbL licence). Some entries are wrong or incomplete, so the data is "
-        "checked and repaired where possible. See the Data quality page."
+        "Product data is from Open Food Facts, an open database that anyone can "
+        "edit. Some entries are wrong or incomplete, so the data is checked and "
+        "repaired where possible. See the Data quality page, and the About page "
+        "for what the score does and doesn't mean."
     )
 
 
@@ -716,19 +751,103 @@ def view_data_quality() -> None:
 
     st.subheader("Fixed instead of thrown away")
     st.markdown("""
-- **Sodium entered in milligrams where grams were expected.** Indian labels print sodium in mg and contributors copy the number. Table salt is 39 g of sodium per 100 g, so any value above 40 has to be mg. Dropping these records would have removed Britannia Marie Gold, Good Day, Kissan Ketchup and Top Ramen.
+- **Sodium entered in milligrams where grams were expected.** Indian labels print sodium in mg and contributors copy the number. Table salt is 39 g of sodium per 100 g, so any value above 40 has to be mg. Dropping these records would have removed a lot of well-known Indian products.
 - **Kilojoules entered as kilocalories.** Spotted when the stated energy is about 4.2 times what the fat, carbohydrate and protein add up to.
 - **One impossible value**, like saturated fat above total fat. That one field is blanked and the product keeps its other numbers.
 - **Fibre is left out of the "adds up to 100 g" check.** Labels disagree on whether carbohydrate already includes fibre, so counting it wrongly failed high-fibre products like atta and oats.
+
+Some values can't be fixed, only refused. If a product that always contains salt (a biscuit, a sauce, noodles) lists sodium as 0, or lists no saturated fat despite over 10 g of total fat, or every value is 0, it gets no score. A blank entered as zero would otherwise count as the best possible result.
 """)
 
     st.subheader("Known limits")
     st.markdown("""
 - Open Food Facts isn't ground truth. One India record called "Organic Goat Feed" has an Indian biscuit's ingredient list.
+- "Listed for India" isn't the same as "sold in India". Some records are labels from other countries that carry an India tag.
 - The same product can be listed under different barcodes (around 250 repeated names in this data).
+- Some products are filed in the wrong category because their source tags are wrong, for example a biscuit tagged as a fermented milk product.
 - Only about a fifth of Open Food Facts' India products have both a full nutrition panel and a full ingredient list.
 - Everything is per 100 g. A small packet and a large one score the same.
 """)
+
+
+def view_about() -> None:
+    st.title("About and disclaimer")
+    st.write(
+        "This is a student project by Sahil Yadav. It takes the nutrition panel "
+        "and ingredient list that people have entered on Open Food Facts for a "
+        "product, and runs published nutrient-profiling methods on them. The "
+        "score is the result of that calculation."
+    )
+
+    st.subheader("What a score is, and isn't")
+    st.write(
+        "A score is an automated calculation from label data. It is not medical "
+        "or dietary advice, and it is not a safety, quality or hygiene rating. "
+        "It does not say that any product is healthy, unhealthy, safe or unsafe, "
+        "and it does not describe what a product does to any person. A low score "
+        "only means the label data gives a low result under these methods. For "
+        "advice about your own diet, ask a doctor or a registered dietitian."
+    )
+
+    st.subheader("The data can be wrong")
+    st.write(
+        "All product data comes from Open Food Facts, which anyone can edit. An "
+        "entry can contain typing mistakes, be out of date, or describe an older "
+        "version of the pack, and recipes change. Some entries are labels from "
+        "other countries that carry an India tag. Each product page links to its "
+        "source record and shows when it was last edited. Please check the pack "
+        "in your hand before relying on any number here."
+    )
+
+    st.subheader("The method is a set of choices")
+    st.write(
+        "The score depends on choices made by the author: the weights, the caps "
+        "and the edges between the 1 to 10 ratings, all listed on the How it "
+        "works page. Other reasonable methods would give different numbers. The "
+        "ratings are the author's analysis, produced by that published method, "
+        "and are not statements of fact about any company or product."
+    )
+
+    st.subheader("Brands and trademarks")
+    st.write(
+        "Product and brand names appear only to identify the products being "
+        "scored. They belong to their owners. This project is not affiliated "
+        "with, endorsed by or sponsored by any brand, or by Open Food Facts, "
+        "FSSAI, WHO or any other organisation mentioned. No logos or product "
+        "images are used."
+    )
+
+    st.subheader("Corrections and removal")
+    st.markdown(
+        "If you own a brand, or you can see a mistake, please "
+        f"[open an issue]({ISSUES_URL}) with the barcode and what is wrong. "
+        "Wrong source data is best corrected on Open Food Facts itself, and it "
+        "is picked up here when the dataset is rebuilt. If a record is wrong, or "
+        "you would like a product taken out of this app, say so in the issue and "
+        "it will be looked at."
+    )
+
+    st.subheader("No warranty")
+    st.write(
+        "This app is provided as it is, without any warranty. To the extent the "
+        "law allows, the author is not responsible for decisions made using it."
+    )
+
+    st.subheader("Data licence")
+    st.markdown(
+        "Contains information from Open Food Facts, which is made available "
+        "under the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/). "
+        "The individual contents are under the "
+        "[Database Contents License](https://opendatacommons.org/licenses/dbcl/1-0/). "
+        "The cleaned dataset in this project's repository is a derivative of that "
+        "data and is shared under the same licence."
+    )
+
+    st.subheader("Who made this")
+    st.markdown(
+        "Sahil Yadav · [GitHub](https://github.com/SahilYadav-op) · "
+        "[LinkedIn](https://www.linkedin.com/in/sahilgod01/)"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -741,13 +860,13 @@ st.sidebar.title("India Food Health Index")
 if df.empty:
     st.sidebar.error("No dataset found.")
 else:
-    st.sidebar.caption(f"{len(df):,} packaged products sold in India, from Open "
+    st.sidebar.caption(f"{len(df):,} packaged products listed for India on Open "
                        "Food Facts.")
 view = st.sidebar.radio("Pages", VIEWS, key="view", label_visibility="collapsed")
 st.sidebar.divider()
 st.sidebar.caption(
-    "Not medical advice. A student project that applies published "
-    "nutrient-profiling models. It makes no health claims about any single food."
+    "Not medical advice. Scores are an automated calculation from label data "
+    "that can be wrong, not a safety rating. See About."
 )
 st.sidebar.markdown(
     "Built by **[Sahil Yadav](https://github.com/SahilYadav-op)**  \n"
@@ -770,9 +889,11 @@ elif view == "Compare":
     view_compare(df)
 elif view == "Browse":
     view_browse(scored)
-elif view == "Best and worst":
-    view_best_worst(scored)
+elif view == "Highest and lowest":
+    view_highest_lowest(scored)
 elif view == "How it works":
     view_how()
-else:
+elif view == "Data quality":
     view_data_quality()
+else:
+    view_about()

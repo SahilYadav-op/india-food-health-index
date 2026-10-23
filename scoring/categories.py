@@ -143,7 +143,7 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
         "mass gainer", "weight gainer", "bcaa", "creatine", "pre workout",
         "pre-workout", "multivitamin", "capsule", "tablet", "softgel",
         "supplement", "amino acid", "glutamine", "electrolyte powder", "ors",
-        "whey", "casein", "gold standard", "isolate", "nutrition powder",
+        "whey", "casein", "collagen", "gold standard", "isolate", "nutrition powder",
         "health drink powder", "meal replacement")),
 
     ("alcohol", (
@@ -180,9 +180,9 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
         "butter", "cooking oil", "blended oil", "palmolein")),
 
     ("nuts_seeds", (
-        "nuts-and-their-products", "nuts", "seeds", "almonds", "cashew",
+        "nuts-and-their-products", "nuts", "almonds", "cashew",
         "peanut-butters", "nut-butters", "dried-fruits-and-nuts", "walnuts",
-        "pistachios", "sunflower-seeds", "chia-seeds", "flax",
+        "pistachios", "sunflower-seeds", "chia-seeds", "flax", "pumpkin-seeds",
     ), ("almond", "badam", "cashew", "kaju", "walnut", "akhrot", "pistachio",
         "pista", "peanut butter", "almond butter", "chia seed", "flax seed",
         "alsi", "pumpkin seed", "sunflower seed", "melon seed", "magaz",
@@ -200,7 +200,7 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
 
     ("juice", (
         "fruit-juices", "fruit-nectars", "vegetable-juices", "100-fruit-juices",
-        "concentrated-fruit-juices",
+        "concentrated-fruit-juices", "juice", "juices",
     ), ("fruit juice", "100% juice", "real juice", "tropicana", "nectar",
         "orange juice", "apple juice", "mixed fruit juice")),
 
@@ -224,7 +224,9 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
     ("beverage_unsweetened", (
         "teas", "coffees", "green-teas", "herbal-teas", "instant-coffees",
         "plant-based-beverages", "soy-milks", "almond-milks", "coconut-milks",
-    ), ("green tea", "black tea", "tea bag", "instant coffee", "filter coffee",
+        "soy-drinks", "flavoured-waters", "flavored-waters", "sparkling-waters",
+        "carbonated-waters",
+    ), ("soy drink", "green tea", "black tea", "tea bag", "instant coffee", "filter coffee",
         "coffee powder", "soy milk", "soya milk", "almond milk", "oat milk",
         "coconut water", "nariyal pani")),
 
@@ -245,7 +247,8 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
         "milk-sweets", "indian-sweets",
     ), ("condensed milk", "milkmaid", "rasgulla", "gulab jamun", "rasmalai",
         "kheer", "payasam", "basundi", "peda", "barfi", "burfi", "mithai",
-        "soan papdi", "kalakand", "milk cake")),
+        "soan papdi", "kalakand", "milk cake", "laddu", "ladoo", "laddoo",
+        "halwa", "jalebi", "mysore pak")),
 
     ("milk", ("milks", "milks-liquid-and-powder", "toned-milks", "whole-milks",
               "skimmed-milks", "milk-powders", "creams", "uht-milks"),
@@ -270,7 +273,8 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
         "namkeen", "bhujia", "sev", "mixture", "chivda", "chiwda", "farsan",
         "moong dal", "masala peanut", "aloo bhujia", "popcorn", "nachos",
         "puffs", "papad", "papadum", "fryums", "murukku", "chakli", "mathri",
-        "khakhra", "banana chips", "tapioca chips", "khatta meetha",
+        "khakhra", "banana chips", "tapioca chips", "gathiya", "ganthiya",
+        "papdi", "khatta meetha",
         "navratan", "dal moth", "peanut masala", "salted peanut")),
 
     ("confectionery", (
@@ -292,7 +296,7 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
     ("breakfast_cereal", (
         "breakfast-cereals", "mueslis", "cereal-flakes", "corn-flakes", "granolas",
         "oat-flakes", "puffed-cereals", "porridges",
-    ), ("corn flakes", "cornflakes", "muesli", "granola", "oats", "rolled oats",
+    ), ("weetabix", "chocapic", "corn flakes", "cornflakes", "muesli", "granola", "oats", "rolled oats",
         "instant oats", "dalia", "daliya", "porridge", "chocos", "poha",
         "upma mix", "breakfast cereal")),
 
@@ -322,6 +326,8 @@ RULES: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
     ("ready_meal", (
         "ready-made-meals", "prepared-meals", "canned-meals", "frozen-meals",
         "soups", "instant-mixes", "curries", "meal-kits", "frozen-foods",
+        "combination-meals", "microwave-meals", "fresh-meals", "soup-powder",
+        "instant-soups",
     ), ("ready to eat", "ready-to-eat", "instant mix", "dosa mix", "idli mix",
         "gulab jamun mix", "soup", "cup soup", "frozen paratha", "frozen roti",
         "samosa", "spring roll", "nuggets", "french fries", "biryani",
@@ -447,6 +453,14 @@ WATER_DISQUALIFIERS = ("carbonated", "flavoured", "flavored", "sweetened",
                        "tonic", "soda", "sparkling", "coconut", "vitamin",
                        "energy", "cola")
 
+# Tags a rule must ignore even though they match its wording. The milk rule has
+# the tag part "creams", and `en:ice-creams` ends in "-creams", so every ice cream
+# in the data was being filed as milk.
+TAG_DISQUALIFIERS = {
+    "water": WATER_DISQUALIFIERS,
+    "milk": ("ice-cream",),
+}
+
 
 # These win outright on a single tag: a supplement or an infant food must never
 # be outvoted by however many snack tags a contributor also attached.
@@ -459,6 +473,32 @@ PRIORITY_KEYS = ("non_food", "infant_food", "supplement", "alcohol")
 # first-match scored 90.8%, and margins of 3 and 4 both held 90.8% while still
 # fixing the case below. A margin of 2 slipped to 90.6%.
 OVERRIDE_MARGIN = 3
+
+PLAIN_DAIRY = {"milk", "dairy_fermented", "cheese", "dairy_dessert"}
+SNACK_KEYS = {"biscuits", "salty_snacks", "confectionery", "bread_bakery",
+              "desserts_frozen"}
+
+# Tags for these describe the raw ingredient (banana, pulses, flour), while the
+# product is a snack made from it. When the product NAME contains a word that can
+# only mean a snack, the name wins. The list is short on purpose: a first version
+# reused the full keyword lists and filed a vegetable pickle as a biscuit (a brand
+# contained "bourbon"), plain moong dal as a snack ("moong dal" is also a namkeen)
+# and chocolate-flavoured oats as confectionery. Only the product name is checked,
+# never the brand.
+RAW_INGREDIENT_KEYS = {"fruit_veg", "staples"}
+_SNACK_WORDS = (
+    (re.compile(r"(?<![a-z])(chips|crisps|namkeen|bhujia|gathiya|ganthiya)(?![a-z])"),
+     "salty_snacks"),
+    (re.compile(r"(?<![a-z])(laddu|ladoo|laddoo|chikki)(?![a-z])"), "confectionery"),
+)
+
+
+def _snack_from_name(name: str) -> tuple[str, str] | None:
+    for pattern, category in _SNACK_WORDS:
+        m = pattern.search(name)
+        if m:
+            return category, m.group(1)
+    return None
 
 
 def _match_tags(tags: list[str]) -> tuple[str, str] | None:
@@ -478,8 +518,8 @@ def _match_tags(tags: list[str]) -> tuple[str, str] | None:
     for rank, (key, tag_parts, _) in enumerate(RULES):
         count, first_tag = 0, None
         for tag in useful:
-            leaf = tag.split(":")[-1]
-            if key == "water" and any(q in leaf for q in WATER_DISQUALIFIERS):
+            leaf = tag.split(":")[-1].lower().replace(" ", "-")
+            if any(q in leaf for q in TAG_DISQUALIFIERS.get(key, ())):
                 continue
             if any(_tag_matches(leaf, part) for part in tag_parts):
                 count += 1
@@ -497,6 +537,15 @@ def _match_tags(tags: list[str]) -> tuple[str, str] | None:
     leader = max(hits, key=lambda k: (hits[k][0], -hits[k][1]))
     if leader != first_key and hits[leader][0] >= hits[first_key][0] + OVERRIDE_MARGIN:
         return leader, hits[leader][2]
+
+    # A plain dairy tag shouldn't win a tie against a snack tag. "Dairy Milk Silk
+    # Minis" carries two chocolate tags and two milk tags, and the milk rule is
+    # checked first, so a chocolate bar was filed as milk.
+    if first_key in PLAIN_DAIRY:
+        snack = [k for k in hits if k in SNACK_KEYS and hits[k][0] >= hits[first_key][0]]
+        if snack:
+            best = max(snack, key=lambda k: (hits[k][0], -hits[k][1]))
+            return best, hits[best][2]
     return first_key, hits[first_key][2]
 
 
@@ -529,10 +578,9 @@ def _match_nutrients(row: dict) -> tuple[str, str] | None:
     # Protein-dominant powder: >50 g protein and little else is a supplement.
     if protein is not None and protein >= 50 and (carbs or 0) < 30:
         return "supplement", "protein>=50g/100g"
-    # Near-zero everything in a liquid is water.
-    if (energy is not None and energy <= 2 and (fat or 0) <= 0.5
-            and (carbs or 0) <= 0.5 and (protein or 0) <= 0.5):
-        return "water", "energy<=2kcal/100g"
+    # There used to be a rule here filing anything with ~0 energy as water. It put
+    # a vitamin gummy with an empty panel at 10/10 "Excellent". A blank panel looks
+    # exactly like water, so only a tag or a name may say something is water.
     return None
 
 
@@ -544,6 +592,16 @@ _ALCOHOL_VETO = re.compile(
     r"root beer|ginger beer|beer shampoo"
 )
 
+
+# Categories where a sodium value of exactly 0 almost always means the field was
+# left blank, because a biscuit, a sauce or a bowl of noodles always has salt.
+SALT_ALWAYS_PRESENT = {"biscuits", "salty_snacks", "bread_bakery", "noodles_pasta",
+                       "cheese", "condiments", "ready_meal"}
+
+_FLAVOURED_WATER = re.compile(
+    r"flavou?r|lemon|lime|citron|orange|zero|sugar[\s-]?free|tonic|electrolyte|"
+    r"vitamin|sports?\b"
+)
 
 # Water is defined physically, not by its tag: it carries no energy and no sugar.
 # Some Indian records are tagged `en:waters` outright while being soft drinks -
@@ -567,6 +625,10 @@ def _veto(key: str, text: str, row: dict) -> str | None:
         if (energy is not None and energy > WATER_MAX_KCAL) or \
            (sugars is not None and sugars > WATER_MAX_SUGARS):
             return "beverage_sweetened"
+        # Zero-calorie but not plain: flavoured, sugar-free or sports drinks are
+        # beverages under Nutri-Score 2023, not water.
+        if _FLAVOURED_WATER.search(text):
+            return "beverage_unsweetened"
     return None
 
 
@@ -597,6 +659,11 @@ def classify(row: dict) -> CategoryResult:
         corrected = _veto(hit[0], text, row)
         if corrected:
             return _result(corrected, "tags+veto", f"{hit[1]} vetoed by name")
+        if hit[0] in RAW_INGREDIENT_KEYS:
+            snack = _snack_from_name(_norm(row.get("product_name")))
+            if snack:
+                return _result(snack[0], "name over tags",
+                               f"{snack[1]} (tags said {hit[0]})")
         return _result(hit[0], "tags", hit[1])
 
     if text:

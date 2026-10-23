@@ -122,6 +122,20 @@ def test_allergens_split_case_insensitively():
     assert set(label.allergens) == {"wheat", "milk"}, label.allergens
 
 
+def test_one_ingredient_per_line_is_split():
+    """Flattening newlines into spaces merged a whole list into a single item."""
+    label = parse_ingredients("Fish oil 73.9%\nsalmon 60%\nanchovy 35%\nsardine 4%")
+    assert len(label.top_level_names()) == 4, label.top_level_names()
+
+
+def test_pasted_nutrition_table_is_cut_off():
+    label = parse_ingredients(
+        "Milk solids, Soyabean oil, Minerals NUTRITION INFORMATION Per 100 g "
+        "Energy 480 kcal Protein 12 g")
+    assert label.top_level_names() == ["milk solids", "soyabean oil", "minerals"], \
+        label.top_level_names()
+
+
 def test_parser_never_raises():
     for bad in (None, "", "   ", "???", "[[[", "INS", "500)", "a" * 5000,
                 "Energy.protrin.carbohydrate."):
@@ -235,6 +249,46 @@ def test_one_extra_tag_does_not_override_the_specific_rule():
     tags = ["en:milks", "en:milks-liquid-and-powder", "en:milk-shakes"]
     assert classify({"categories_tags": tags,
                      "product_name": "Chocolate milk shake"}).key == "dairy_drink"
+
+
+def test_chocolate_with_milk_tags_is_not_milk():
+    """Two chocolate tags and two milk tags is a tie, and dairy must not win ties."""
+    tags = ["en:dairies", "en:snacks", "en:cocoa-and-its-products",
+            "en:milks-liquid-and-powder", "en:milks", "en:chocolates"]
+    assert classify({"categories_tags": tags,
+                     "product_name": "Dairy Milk Silk Minis"}).key == "confectionery"
+
+
+def test_name_beats_raw_ingredient_tags_for_snacks():
+    """Banana chips are tagged as fruit, gathiya as pulses. The name says snack."""
+    fruit = classify({"categories_tags": ["en:fruit-based-foods-and-beverages",
+                                          "en:fruits-and-vegetables-based-foods"],
+                      "product_name": "Yellow banana chips"})
+    assert fruit.key == "salty_snacks", fruit.key
+    pulses = classify({"categories_tags": ["en:legumes-and-their-products", "en:pulses"],
+                       "product_name": "Papdi gathiya"})
+    assert pulses.key == "salty_snacks", pulses.key
+    # A plain pulse is still a pulse, including moong dal, which is also the name of
+    # a fried snack.
+    for plain in ("Toor dal", "Moong dal"):
+        assert classify({"categories_tags": ["en:legumes-and-their-products", "en:pulses"],
+                         "product_name": plain}).key == "staples", plain
+
+
+def test_name_override_ignores_brand_and_flavour_words():
+    """A pickle from a brand containing "bourbon", and chocolate-flavoured oats,
+    were both pulled into snack categories by an over-broad override."""
+    pickle = classify({"categories_tags": ["en:fruits-and-vegetables-based-foods"],
+                       "product_name": "Achard legumes", "brands": "Le Bourbon"})
+    assert pickle.key == "fruit_veg", pickle.key
+    oats = classify({"categories_tags": ["en:cereals-and-their-products", "en:cereal-grains"],
+                     "product_name": "High Protein Oats (Dark Chocolate)"})
+    assert oats.key not in ("confectionery", "biscuits"), oats.key
+
+
+def test_collagen_products_are_refused_as_supplements():
+    assert classify({"categories_tags": [], "product_name": "collagen refreshers"}
+                    ).scoreable is False
 
 
 def test_supplements_are_refused():
@@ -404,23 +458,101 @@ def test_water_scores_ten_and_cola_does_not():
     assert cola.score <= 5, (cola.score, cola.composite_0_100)
 
 
-def test_ladder_is_complete_and_avoids_toxicity_claims():
-    """The ladder must never ASSERT that a food is toxic or causes disease.
+def test_ladder_describes_the_score_not_the_product():
+    """Each rung says what the model scored, never what a product does to a person.
 
-    Checks phrases, not bare words: band 1 legitimately contains "Not toxic in one
-    packet", which negates the claim rather than making it. No packaged food sold
-    legally in India is toxic at normal intake, and a disease claim would breach
-    FSSAI labelling rules as well as being unsupportable.
+    "Scores low" is a statement about a calculation. "Harmful" or "poor" about a
+    named product is a claim of fact the project can't prove, and a health claim
+    about a food is also something Indian advertising rules treat carefully.
     """
     from scoring.index import LADDER
     assert set(LADDER) == set(range(1, 11))
     text = " ".join(f"{b.label} {b.meaning} {b.basis}" for b in LADDER.values()).lower()
-    for banned in ("is toxic", "very toxic", "highly toxic", "poisonous",
-                   "will destroy", "destroys your", "causes cancer",
-                   "cancer-causing", "cures", "will harm your health"):
+    for banned in ("toxic", "poison", "harmful", "unhealthy", "dangerous", "unsafe",
+                   "poor", "avoid", "destroy", "causes cancer", "cancer-causing",
+                   "cures", "your health", "your diet"):
         assert banned not in text, banned
-    # And the strong bottom band must frame the claim as habitual, not acute.
-    assert "regular" in LADDER[1].label.lower() or "habit" in LADDER[1].label.lower()
+    assert all(b.meaning.startswith("Scores") for b in LADDER.values())
+
+
+def test_no_claim_that_a_regulator_forbids_a_named_product():
+    """Cap reasons state the numbers against WHO's limit. They never say WHO
+    "would not permit" a product, which is a statement about a specific product's
+    status that WHO has not made."""
+    result = score_product(dict(PARLE_G_ROW, sodium=1.6, salt=4.0))
+    text = " ".join(c.reason for c in result.caps_applied).lower()
+    assert "would not permit" not in text and "not allowed" not in text, text
+    assert "against" in text or "over" in text, text
+
+
+# --------------------------------------------------------------------------- #
+# bad panels and mis-filed categories found in the second audit
+# --------------------------------------------------------------------------- #
+
+_BISCUIT = dict(PARLE_G_ROW)
+
+
+def test_blank_sodium_zero_is_refused_in_salty_categories():
+    """51 scored products (a sauce, noodles, biscuits) listed sodium as exactly 0.
+    A zero scores as best case, so a blank field made the product look better."""
+    result = score_product(dict(_BISCUIT, sodium=0.0, salt=0.0))
+    assert not result.scoreable
+    assert "sodium" in result.refusal_reason.lower()
+
+
+def test_saturated_fat_zero_with_high_total_fat_is_refused():
+    result = score_product(dict(_BISCUIT, fat=25.0, saturated_fat=0.0))
+    assert not result.scoreable
+
+
+def test_all_zero_panel_refused_unless_a_drink():
+    """A vitamin gummy with an empty panel scored 10/10 because zeros look like water."""
+    empty = dict(_BISCUIT, energy_kcal=0.0, fat=0.0, saturated_fat=0.0,
+                 carbohydrates=0.0, sugars=0.0, proteins=0.0, sodium=0.1, salt=0.25,
+                 categories_tags=[], product_name="Gummy Vites", ingredients_text=None)
+    assert not score_product(empty).scoreable
+    diet_drink = dict(empty, categories_tags=["en:carbonated-drinks"],
+                      product_name="Diet cola", ingredients_text="Water, Sweetener (INS 951).")
+    assert score_product(diet_drink).scoreable   # zero is normal for a diet drink
+
+
+def test_empty_panel_with_no_tags_is_not_filed_as_water():
+    result = classify({"categories_tags": [], "product_name": "Gummy Vites",
+                       "energy_kcal": 0.0, "fat": 0.0, "carbohydrates": 0.0,
+                       "proteins": 0.0})
+    assert result.key != "water", result.key
+
+
+def test_ice_cream_is_not_milk():
+    """The milk rule matched the tag part "creams", and `ice-creams` ends in it."""
+    tags = ["en:desserts", "en:frozen-desserts", "en:ice-creams-and-sorbets",
+            "en:ice-creams", "en:ice-cream-tubs"]
+    assert classify({"categories_tags": tags, "product_name": "Vanilla tub"}).key == "desserts_frozen"
+
+
+def test_oats_are_not_nuts_and_seeds():
+    """Open Food Facts tags every cereal grain `en:seeds`."""
+    tags = ["en:plant-based-foods", "en:breakfasts", "en:seeds",
+            "en:cereals-and-their-products", "en:breakfast-cereals", "en:cereal-grains"]
+    assert classify({"categories_tags": tags, "product_name": "Masala Oats"}).key != "nuts_seeds"
+
+
+def test_flavoured_or_sugar_free_water_is_a_beverage():
+    for name in ("Perrier Citron", "Gatorade zero sugar lemon lime"):
+        result = classify({"categories_tags": ["en:waters"], "product_name": name,
+                           "energy_kcal": 0.0, "sugars": 0.0})
+        assert result.key != "water", (name, result.key)
+
+
+def test_liquid_milk_gets_the_who_screen_but_powder_does_not():
+    milk = {"energy_kcal": 58.0, "fat": 3.0, "sodium": 0.04, "sugars": 4.8}
+    assert searo_screen(milk, "milk").applicable
+    full_fat_buffalo = {"energy_kcal": 110.0, "fat": 8.5, "sodium": 0.05}
+    assert searo_screen(full_fat_buffalo, "milk").breaches   # over WHO's 7 g fat limit
+    powder = {"energy_kcal": 496.0, "fat": 26.0, "sodium": 0.37}
+    assert not searo_screen(powder, "milk").applicable
+
+
 
 
 # --------------------------------------------------------------------------- #
@@ -496,6 +628,21 @@ def test_alternatives_skip_zero_sodium_in_salty_categories():
     ]
     cols = ["code", "product_name", "brands", "category", "score", "confidence",
             "scoreable", "sugars", "saturated_fat", "sodium_mg"]
+    out = better_alternatives(pd.DataFrame(rows, columns=cols), "1")
+    assert list(out["code"]) == ["3"], list(out["code"])
+
+
+def test_alternatives_skip_barcode_only_names():
+    import pandas as pd
+    from scoring.suggest import better_alternatives
+
+    rows = [
+        ("1", "Digestive", "A", "biscuits", 2, "high", True, True),
+        ("2", "8901560043037", None, "biscuits", 7, "high", True, False),
+        ("3", "Oat biscuit", "C", "biscuits", 6, "high", True, True),
+    ]
+    cols = ["code", "product_name", "brands", "category", "score", "confidence",
+            "scoreable", "named"]
     out = better_alternatives(pd.DataFrame(rows, columns=cols), "1")
     assert list(out["code"]) == ["3"], list(out["code"])
 

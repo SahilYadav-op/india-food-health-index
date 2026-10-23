@@ -10,8 +10,8 @@ substances that are heavily attacked online get a penalty of ZERO here, with the
 reason recorded, because the evidence does not support one:
 
   MSG (INS 621) and the ribonucleotides INS 627/631/635
-      "Chinese restaurant syndrome" traces to a 1968 letter later reported to be
-      a prank. Double-blind trials find no effect. JECFA ADI "not specified",
+      "Chinese restaurant syndrome" traces to a 1968 letter to a medical journal.
+      Double-blind trials have not reproduced it. JECFA ADI "not specified",
       FDA GRAS. FSSAI's mandatory "not recommended for infants below 12 months"
       declaration is precautionary labelling, not a toxicological finding. MSG is
       12.3% sodium against table salt's 39.3%, so replacing salt with MSG lowers
@@ -34,8 +34,8 @@ reason recorded, because the evidence does not support one:
 RULE 2 - separate "the regulators disagree" from "this is proven harmful".
 Titanium dioxide is the clearest case: EFSA could not exclude genotoxicity and
 the EU banned it in August 2022, while JECFA reviewed the same dossier in 2023
-and kept the ADI unchanged, and FSSAI still permits it. The honest label is
-regulatory divergence.
+and kept the ADI unchanged, and India had not banned it when last checked
+(July 2026). The honest label is regulatory divergence.
 
 RULE 3 - do not stack a penalty that the nutrition panel already charges. Sodium
 is penalised from the declared sodium figure. The sodium-bearing additives here
@@ -97,8 +97,9 @@ def _add(a: Additive) -> None:
 # McCann, Lancet 2007: randomised, double-blind, placebo-controlled crossover in
 # 297 children; two colour+benzoate mixes significantly increased hyperactivity.
 # The EU has required "may have an adverse effect on activity and attention in
-# children" on these since 20 July 2010. India permits five of the six and
-# requires no warning. This is the best-evidenced additive penalty in the register.
+# children" on these since 20 July 2010. FSSAI's list of permitted synthetic
+# colours includes tartrazine, sunset yellow, carmoisine and ponceau 4R. This is
+# the best-evidenced additive penalty in the register.
 _SOUTHAMPTON_SRC = (
     "McCann et al., Lancet 2007;370:1560-67",
     "Regulation (EC) 1333/2008 Annex V",
@@ -116,17 +117,20 @@ for _code, _ins, _name, _india in [
             note="One of the six 'Southampton colours'. A randomised controlled "
                  "trial linked these to increased hyperactivity and reduced "
                  "attention in children, and the EU has required a warning on "
-                 "them since 2010. India permits them with no warning label.",
+                 "them since 2010. India has no equivalent warning requirement.",
             sources=_SOUTHAMPTON_SRC))
 
 # EFSA cut the ADIs for quinoline yellow, sunset yellow and ponceau 4R after
 # re-evaluation; ponceau 4R fell from 4 to 0.7 mg/kg bw/day.
 
 _add(_a("e127", "127", "Erythrosine", "colour", 5, LIMITED, nova_cosmetic=True,
-        note="Removed from US food use over thyroid-tumour findings in rats; "
-             "still permitted in India. Iodine-rich, and thyroid effects are the "
-             "documented concern.",
-        sources=("FDA 21 CFR 81.10", "FSSAI permitted synthetic colours")))
+        note="The US FDA revoked its authorisation for use in food in January "
+             "2025, after studies showing cancer in male rats (a mechanism FDA "
+             "described as specific to rats). Food makers there have until "
+             "January 2027 to reformulate. It is on FSSAI's list of permitted "
+             "synthetic colours.",
+        sources=("FDA revocation of FD&C Red No. 3, January 2025",
+                 "FSSAI permitted synthetic colours")))
 
 for _code, _ins, _name in [("e132", "132", "Indigo Carmine"),
                            ("e133", "133", "Brilliant Blue FCF"),
@@ -175,9 +179,10 @@ _add(_a("e171", "171", "Titanium Dioxide", "colour", 5, DIVERGENT,
         note="Regulators disagree. EFSA concluded in 2021 that a concern for "
              "genotoxicity could not be excluded and could set no ADI, and the "
              "EU banned it from food in August 2022. JECFA reviewed the same "
-             "evidence in 2023 and left the ADI unchanged, and FSSAI still "
-             "permits it. This penalty reflects the precautionary EU position, "
-             "not a demonstrated human harm.",
+             "evidence in 2023 and left the ADI unchanged, and India had not "
+             "banned it when this was last checked (July 2026). This penalty "
+             "reflects the precautionary EU position, not a demonstrated human "
+             "harm.",
         sources=("EFSA Journal 2021;19(5):6585",
                  "Commission Regulation (EU) 2022/63",
                  "JECFA 97th meeting, 2023")))
@@ -235,8 +240,7 @@ for _code, _ins, _name in [("e420", "420", "Sorbitol"), ("e421", "421", "Mannito
                            ("e968", "968", "Erythritol"), ("e953", "953", "Isomalt")]:
     _add(_a(_code, _ins, _name, "sweetener", 1, NONE, nova_cosmetic=True,
             note="A sugar alcohol, outside the scope of WHO's non-sugar-sweetener "
-                 "advice. Main effect is laxative at higher doses, which Indian "
-                 "labels must warn about above 10% content."))
+                 "advice. Main effect is laxative at higher doses."))
 
 # ---- emulsifiers, thickeners, stabilisers --------------------------------- #
 _EMULSIFIER_NOTE = (
@@ -311,9 +315,10 @@ for _code, _ins, _name in [("e220", "220", "Sulphur Dioxide"),
     _add(_a(_code, _ins, _name, "preservative", 2, STRONG,
             note="Sulphites trigger bronchoconstriction in a minority of people "
                  "with asthma - one of the few additive effects with solid "
-                 "clinical evidence. Declaration is mandatory above 10 mg/kg.",
+                 "clinical evidence. In the EU, labels must declare sulphites "
+                 "above 10 mg/kg.",
             sources=("EFSA Journal 2016;14(4):4438",
-                     "FSS (Labelling and Display) Regulations 2020")))
+                     "Regulation (EU) 1169/2011, Annex II")))
 
 # Nitrites and nitrates: the marker that identifies processed meat.
 for _code, _ins, _name in [("e249", "249", "Potassium Nitrite"),
@@ -351,9 +356,9 @@ _add(_a("e321", "321", "BHT", "antioxidant", 1, LIMITED,
              "Treated as a cheap-fat marker.",
         sources=("JECFA ADI 0-0.3 mg/kg bw",)))
 _add(_a("e319", "319", "TBHQ", "antioxidant", 1, LIMITED,
-        note="JECFA ADI 0-0.7 mg/kg bw; FSSAI caps it at 200 mg/kg. The "
-             "immunotoxicity signal is from mice only. Common in fried snacks "
-             "and instant noodles, so it functions as a cheap-fat marker.",
+        note="JECFA ADI 0-0.7 mg/kg bw. The immunotoxicity signal is from mice "
+             "only. Used in frying oils and fried snacks, so it works as a "
+             "cheap-fat marker.",
         sources=("JECFA ADI 0-0.7 mg/kg bw",)))
 _add(_a("e300", "300", "Ascorbic Acid (Vitamin C)", "antioxidant", 0, NONE,
         note="Vitamin C. No penalty. Relevant only because it can react with "
@@ -405,9 +410,9 @@ for _code, _ins, _name in [("e541", "541", "Sodium Aluminium Phosphate"),
 
 # ---- flavour enhancers: penalty ZERO, reason recorded --------------------- #
 _MSG_NOTE = (
-    "No penalty, deliberately. The 'Chinese restaurant syndrome' story began "
-    "with a 1968 letter later reported to be a prank; double-blind trials have "
-    "not reproduced it. JECFA sets no numerical limit and the FDA treats MSG as "
+    "No penalty. The 'Chinese restaurant syndrome' story began with a 1968 "
+    "letter to a medical journal, and double-blind trials have not reproduced "
+    "it. JECFA sets no numerical limit and the FDA treats MSG as "
     "generally recognised as safe. FSSAI's mandatory 'not recommended for "
     "infants below 12 months' wording is precautionary labelling, not a finding "
     "of harm. MSG is 12.3% sodium against table salt's 39.3%, so using it to "
@@ -493,13 +498,11 @@ _add(_a("e385", "385", "Calcium Disodium EDTA", "sequestrant", 1, LIMITED,
              "toxicity.",
         sources=("EFSA Journal 2018;16(6):5299",)))
 _add(_a("e923", "923", "Ammonium Persulphate", "flour treatment agent", 1, LIMITED,
-        note="A flour oxidiser not permitted in the EU. Still used in some Indian "
-             "bakery flour.",
+        note="A flour oxidiser that is not permitted in the EU.",
         sources=("Codex CXG 36-1989",)))
 _add(_a("e1520", "1520", "Propylene Glycol", "humectant", 1, LIMITED,
-        note="JECFA ADI 25 mg/kg bw. No concern at food-use levels; the alarm "
-             "online comes from confusing it with ethylene glycol, a different "
-             "and genuinely toxic chemical.",
+        note="JECFA ADI 25 mg/kg bw, with no concern at food-use levels. It is a "
+             "different chemical from ethylene glycol.",
         sources=("JECFA ADI 0-25 mg/kg bw",)))
 
 # Bare `e150` with no class letter: could be any caramel including the ammonia
