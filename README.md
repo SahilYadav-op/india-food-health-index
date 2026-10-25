@@ -135,4 +135,6 @@ Sahil Yadav · [GitHub](https://github.com/SahilYadav-op) · [LinkedIn](https://
 
 ## Licence
 
-The cleaned data in `data/` is a derivative of Open Food Facts and is shared under the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/). See [data/LICENSE.md](data/LICENSE.md). Contains information from Open Food Facts. Anything built from the data has to credit Open Food Facts and stay under the same licence.
+The code is open source under the [MIT licence](LICENSE). You can use it, copy it and change it, including for your own version of this project.
+
+The cleaned data in `data/` is separate. It is a derivative of Open Food Facts and is shared under the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/). See [data/LICENSE.md](data/LICENSE.md). Contains information from Open Food Facts. Anything built from the data has to credit Open Food Facts and stay under the same licence.

@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .streamlit/secrets.toml
 .claude/
+
+# screenshots and drafts for social posts, not part of the project
+social/
