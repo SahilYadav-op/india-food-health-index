@@ -112,13 +112,23 @@ def load_products() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def search_index() -> list[tuple[str, str, str]]:
-    """(label, lowercase text, barcode). Named, branded products come first."""
+    """(label, lowercase text, barcode), in the order the dropdown shows them.
+
+    Named, branded products come first. Supplements go to the very end: they have
+    no score, and the default list is alphabetical, so "100% Whey" and similar
+    names were turning up among the first things a visitor sees. They can still be
+    found by typing.
+    """
     df = load_products()
     if df.empty:
         return []
+    scored = score_all()
+    supplement_codes = set(scored.loc[scored.category == "supplement", "code"])
     ordered = df.assign(
-        _rank=df["product_name"].notna().astype(int) + df["brands"].notna().astype(int)
-    ).sort_values(["_rank", "product_name"], ascending=[False, True])
+        _supplement=df["code"].isin(supplement_codes).astype(int),
+        _rank=df["product_name"].notna().astype(int) + df["brands"].notna().astype(int),
+    ).sort_values(["_supplement", "_rank", "product_name"],
+                  ascending=[True, False, True])
     return list(zip(ordered["display_label"], ordered["search_blob"],
                     ordered["code"]))
 
